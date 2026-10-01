@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RTI Application Analysis</title>
+<link rel="stylesheet" href="style.css?v=7" />
+<script src="vendor/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>RTI Application Analysis</h1>
+  <div class="header-actions">
+    <button id="save-case">Save case</button>
+    <label class="file-label">Load case<input type="file" id="load-case" accept="application/json" hidden /></label>
+  </div>
+</header>
+
+<main>
+  <section id="inputs-panel">
+    <h2>Inputs</h2>
+    <form id="input-form">
+      <fieldset>
+        <legend>Job</legend>
+        <label>Location <input type="text" name="location" /></label>
+        <label>Pad <input type="text" name="pad" /></label>
+        <label>Well <input type="text" name="well_name" /></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Pump</legend>
+        <label>Model
+          <select name="pump_model" id="pump_model"></select>
+        </label>
+        <label>Alpha override (optional)
+          <input type="number" step="any" name="alpha_override" placeholder="engine default" />
+        </label>
+        <label>Engine mode
+          <select name="engine_mode" id="engine_mode">
+            <option value="parity" selected>Workbook parity</option>
+            <option value="physics">Physics</option>
+          </select>
+        </label>
+        <p class="help-text">Parity reproduces the Excel analyzer including its known quirks; Physics applies
+          the corrections in docs/PHYSICS_REVIEW.md (1714 hydraulic power constant, VE at actual RPM,
+          isothermal gas, no slip netting, clamped curves, envelope warnings).</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Well</legend>
+
+        <label class="green">Pump depth (TVD)
+          <input type="number" step="any" name="pump_depth" value="900" required />
+          <select name="pump_depth_unit"><option value="m" selected>m</option><option value="ft">ft</option></select>
+        </label>
+
+        <label class="green">Fluid level (from surface)
+          <input type="number" step="any" name="fluid_level" value="850" required />
+          <select name="fluid_level_unit"><option value="m" selected>m</option><option value="ft">ft</option></select>
+        </label>
+
+        <label class="green">Flowline (wellhead) pressure
+          <input type="number" step="any" name="flowline_pressure" value="150" required />
+          <select name="flowline_pressure_unit"><option value="psig" selected>psig</option><option value="kPa">kPa</option><option value="Pa">Pa</option></select>
+        </label>
+
+        <label class="green">Casing pressure
+          <input type="number" step="any" name="casing_pressure" value="150" required />
+          <select name="casing_pressure_unit"><option value="psig" selected>psig</option><option value="kPa">kPa</option><option value="Pa">Pa</option></select>
+        </label>
+
+        <label class="green">Desired rate
+          <input type="number" step="any" name="desired_rate" value="200" required />
+          <select name="desired_rate_unit"><option value="m3/d" selected>m3/d</option><option value="bpd">bpd</option></select>
+        </label>
+
+        <div class="estimate-box">
+          <label>Oil API gravity
+            <input type="number" step="any" name="oil_api_gravity" placeholder="e.g. 13.5" />
+          </label>
+          <label>Surface earth temperature (C)
+            <input type="number" step="any" name="surface_earth_temp_c" value="10" />
+          </label>
+          <button type="button" id="estimate-btn">Estimate viscosity, wellhead temperature and annulus gas</button>
+          <p class="hint">From API gravity, reservoir temperature and water cut, plus the depth, rate and wellbore sizes
+            below. Fills the three fields for you to review; nothing else changes.</p>
+          <div id="estimate-note" class="hint" hidden></div>
+        </div>
+
+        <label class="green">Viscosity (cP)
+          <input type="number" step="any" name="viscosity_cp" value="1" />
+        </label>
+
+        <label class="green">Water cut (%)
+          <input type="number" step="any" name="water_cut_pct" value="90" required />
+        </label>
+
+        <label class="green">GOR (sm3/m3)
+          <input type="number" step="any" name="gor_sm3_m3" value="13" required />
+        </label>
+
+        <label class="green">Gas through annulus (%)
+          <input type="number" step="any" name="gas_through_annulus_pct" value="50" required />
+        </label>
+
+        <label class="green">Reservoir temperature
+          <input type="number" step="any" name="reservoir_temp" value="70" required />
+          <select name="reservoir_temp_unit"><option value="C" selected>C</option><option value="F">F</option></select>
+        </label>
+
+        <label class="green">Wellhead temperature
+          <input type="number" step="any" name="wellhead_temp" value="60" required />
+          <select name="wellhead_temp_unit"><option value="C">C</option><option value="F" selected>F</option></select>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Wellbore (physics mode, inches)</legend>
+        <label>Tubing ID
+          <input type="number" step="any" name="tubing_id_in" value="2.441" />
+        </label>
+        <label>Tubing OD
+          <input type="number" step="any" name="tubing_od_in" value="2.875" />
+        </label>
+        <label>Casing ID
+          <input type="number" step="any" name="casing_id_in" value="4.892" />
+        </label>
+        <label>Rod diameter (0 = rodless)
+          <input type="number" step="any" name="rod_od_in" value="1.0" />
+        </label>
+        <label>Rod coupling OD (≤ rod diameter = continuous rod)
+          <input type="number" step="any" name="coupling_od_in" value="2.0" />
+        </label>
+        <label>Dogleg severity, assumed (deg/100 ft)
+          <input type="number" step="any" name="dogleg_severity_deg_per_100ft" value="1.0" />
+        </label>
+        <label>Rod-tubing friction coefficient
+          <input type="number" step="any" name="rod_tubing_friction" value="0.2" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Well inflow (optional)</legend>
+        <p class="hint">When given, the intake pressure at the design rate comes from the inflow curve and the fluid
+          level above is ignored and back-solved.</p>
+        <label>Inflow data
+          <select name="inflow_source">
+            <option value="none" selected>None (use the fluid level)</option>
+            <option value="test">Reservoir test data (CRD form)</option>
+            <option value="points">Pressure vs rate points</option>
+          </select>
+        </label>
+        <div id="inflow-test-block" hidden>
+          <p class="hint">Composite IPR: Vogel below the bubble point, straight-line PI above it. The PI is fitted to
+            the test points, or entered directly if there are none.</p>
+          <label>Static reservoir pressure
+            <input type="number" step="any" name="inflow_reservoir_pressure" />
+          </label>
+          <label>Bubble point pressure (blank = none)
+            <input type="number" step="any" name="inflow_bubble_point" />
+          </label>
+          <label>Reservoir / bubble point unit
+            <select name="inflow_reservoir_pressure_unit"><option value="psig">psi(g)</option><option value="kPa">kPa</option></select>
+          </label>
+          <label>Test 1: producing pressure, rate
+            <span class="pair"><input type="number" step="any" name="inflow_t1_p" /><input type="number" step="any" name="inflow_t1_q" /></span>
+          </label>
+          <label>Test 2: producing pressure, rate (optional)
+            <span class="pair"><input type="number" step="any" name="inflow_t2_p" /><input type="number" step="any" name="inflow_t2_q" /></span>
+          </label>
+          <label>Test pressure unit
+            <select name="inflow_test_pressure_unit"><option value="psig">psi(g)</option><option value="kPa" selected>kPa</option></select>
+          </label>
+          <label>Test rate unit
+            <select name="inflow_test_rate_unit"><option value="bpd">bpd</option><option value="m3/d" selected>m3/d</option></select>
+          </label>
+          <label>Productivity index (used if no test points)
+            <span class="pair"><input type="number" step="any" name="inflow_productivity_index" />
+              <select name="inflow_productivity_index_unit"><option value="bpd/psi">bpd/psi</option><option value="m3/d/kPa">m3/d/kPa</option></select></span>
+          </label>
+        </div>
+        <div id="inflow-points-block" hidden>
+          <p class="hint">One point per line: rate, pressure (paste two columns from Excel).</p>
+          <label>Points
+            <textarea name="inflow_points" rows="5" placeholder="0&#9;1237300&#10;200&#9;1115620&#10;400&#9;713940"></textarea>
+          </label>
+          <label>Rate unit
+            <select name="inflow_rate_unit"><option value="bpd">bpd</option><option value="m3/d" selected>m3/d</option></select>
+          </label>
+          <label>Pressure unit (gauge)
+            <select name="inflow_pressure_unit"><option value="psig">psig</option><option value="kPa">kPa</option><option value="Pa">Pa</option></select>
+          </label>
+        </div>
+        <div id="inflow-ref-block" hidden>
+          <label>Pressures measured at depth (TVD; blank = pump intake, e.g. mid-perforations)
+            <span class="pair"><input type="number" step="any" name="inflow_reference_depth" />
+              <select name="inflow_reference_depth_unit"><option value="m" selected>m</option><option value="ft">ft</option></select></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <button type="submit" id="analyze-btn">Analyze</button>
+      <span id="status"></span>
+    </form>
+  </section>
+
+  <section id="output-panel">
+    <h2 id="results-heading">Results</h2>
+    <div id="warnings-notice" class="warnings-notice" hidden></div>
+    <div id="chart-title"></div>
+    <div id="reports">
+      <div class="report-col">
+        <h3>Imperial</h3>
+        <table id="imperial-table"></table>
+      </div>
+      <div class="report-col">
+        <h3>Metric</h3>
+        <table id="metric-table"></table>
+      </div>
+    </div>
+  </section>
+
+  <section id="charts-panel">
+    <h2>Curves</h2>
+    <div class="chart-tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="tab-pump">Pump curve</button>
+      <button type="button" class="tab-btn" data-tab="tab-drawdown">Well drawdown</button>
+      <button type="button" class="tab-btn" data-tab="tab-legacy">Legacy lift sweep (no gas, workbook)</button>
+    </div>
+
+    <div class="chart-group active" id="tab-pump">
+      <p id="pump-curve-subtitle" class="chart-subtitle"></p>
+      <div id="chart-pump-flow" class="chart"></div>
+      <div id="chart-pump-torque" class="chart"></div>
+      <div id="chart-pump-power" class="chart"></div>
+      <div id="chart-pump-efficiency" class="chart"></div>
+      <div id="chart-pump-stages" class="chart"></div>
+      <div id="chart-wellbore" class="chart"></div>
+    </div>
+
+    <div class="chart-group" id="tab-drawdown">
+      <p id="drawdown-subtitle" class="chart-subtitle"></p>
+      <div id="chart-inflow-rpm" class="chart"></div>
+      <div id="chart-dd-rpm" class="chart"></div>
+      <div id="chart-dd-torque" class="chart"></div>
+      <div id="chart-dd-power" class="chart"></div>
+      <div id="chart-dd-gvf" class="chart"></div>
+      <div id="chart-dd-rate" class="chart"></div>
+
+      <details id="setting-depth-details">
+        <summary>Setting depth sensitivity (optional)</summary>
+        <p class="chart-subtitle">Fluid level fixed; pump depth swept 0.5x-2.5x the entered depth. Re-posts
+          <code>/curves</code> with <code>setting_depths_ft</code> — not requested by default.</p>
+        <button type="button" id="setting-depth-compute">Compute</button>
+        <span id="setting-depth-status"></span>
+        <div id="chart-sd-rate" class="chart"></div>
+        <div id="chart-sd-rpm" class="chart"></div>
+      </details>
+    </div>
+
+    <div class="chart-group" id="tab-legacy">
+      <p class="chart-subtitle">Workbook-parity sweep; holds no gas (docs/CHART_BASIS.md).</p>
+      <div id="chart-flow-lift" class="chart"></div>
+      <div id="chart-torque-lift" class="chart"></div>
+      <div id="chart-power-lift" class="chart"></div>
+      <div id="chart-efficiency-lift" class="chart"></div>
+      <div id="chart-flow-rpm" class="chart"></div>
+    </div>
+  </section>
+</main>
+
+<script src="engine-browser.js"></script>
+<script src="app.js?v=21"></script>
+</body>
+</html>
