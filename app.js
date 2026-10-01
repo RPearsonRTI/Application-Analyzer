@@ -233,7 +233,65 @@ function renderTable(tableEl, report, rows) {
   }
 }
 
-const PLOTLY_CONFIG = { responsive: true };
+const PLOTLY_CONFIG = { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] };
+
+// Brand look for every chart (style.css tokens): Titillium Web, deep teal first, quiet grid.
+const PLOT_AXIS = { gridcolor: "#e9ebe3", linecolor: "#c9cdbf", zerolinecolor: "#c9cdbf", automargin: true };
+const PLOT_TEMPLATE = {
+  layout: {
+    font: { family: '"Titillium Web", "Segoe UI", system-ui, sans-serif', size: 13, color: "#2c2e29" },
+    colorway: ["#053a3f", "#7c8a0c", "#2a78d6", "#eb6834", "#eda100", "#7a5cc2"],
+    paper_bgcolor: "#ffffff",
+    plot_bgcolor: "#ffffff",
+    title: { x: 0.02, xanchor: "left", font: { size: 15 } },
+    xaxis: PLOT_AXIS,
+    yaxis: PLOT_AXIS,
+    margin: { t: 56, r: 24, b: 52, l: 64 },
+    legend: { orientation: "h", x: 0, xanchor: "left", y: -0.22, yanchor: "top" },
+  },
+};
+
+function plot(id, traces, layout, config) {
+  return Plotly.newPlot(id, traces, { template: PLOT_TEMPLATE, ...layout }, config ?? PLOTLY_CONFIG);
+}
+
+// Headline numbers in the results band: [label, report key, unit, digits, multiplier].
+const KPI_DEFS = {
+  imperial: [
+    ["Speed", "rpm", "RPM", 0], ["Torque", "torque_ftlb", "ft·lb", 0], ["Power", "power_hp", "hp", 1],
+    ["Pump dP", "dp_psi", "psi", 0], ["Inlet GVF", "inlet_gvf", "%", 1, 100], ["Vol. efficiency", "ve", "%", 1, 100],
+  ],
+  metric: [
+    ["Speed", "rpm", "RPM", 0], ["Torque", "torque_nm", "N·m", 0], ["Power", "power_kw", "kW", 1],
+    ["Pump dP", "dp_kpa", "kPa", 0], ["Inlet GVF", "inlet_gvf", "%", 1, 100], ["Vol. efficiency", "ve", "%", 1, 100],
+  ],
+};
+let lastReports = null;
+let unitSystem = "imperial";
+try { unitSystem = localStorage.getItem("rti-units") === "metric" ? "metric" : "imperial"; } catch (e) { /* no storage */ }
+
+function renderKpis() {
+  const el = document.getElementById("kpis");
+  el.innerHTML = "";
+  if (!lastReports) return;
+  const report = lastReports[unitSystem];
+  for (const [label, key, unit, digits, mult] of KPI_DEFS[unitSystem]) {
+    const v = report[key];
+    const tile = document.createElement("div");
+    tile.className = "kpi";
+    const text = typeof v === "number" && Number.isFinite(v) ? fmt(v * (mult ?? 1), digits) : "–";
+    tile.innerHTML = `<div class="kpi-label">${label}</div><div class="kpi-value">${text}<span class="kpi-unit">${unit}</span></div>`;
+    el.appendChild(tile);
+  }
+}
+
+function setUnits(system) {
+  unitSystem = system;
+  try { localStorage.setItem("rti-units", system); } catch (e) { /* no storage */ }
+  document.querySelectorAll("#unit-toggle button").forEach((b) => b.classList.toggle("active", b.dataset.units === system));
+  document.querySelectorAll(".report-col").forEach((c) => { c.hidden = c.dataset.units !== system; });
+  renderKpis();
+}
 
 function nan2null(arr) {
   return arr.map((v) => (v === null || v === undefined || Number.isNaN(v) ? null : v));
@@ -272,7 +330,7 @@ function opGuides(xs, ys, x0, label) {
 // A single-curve line chart with operating-point guides.
 function singleCurve(id, x, y, x0, name, layout, label) {
   const g = opGuides(x, y, x0, label);
-  Plotly.newPlot(id, [{ x, y, mode: "lines", name }, ...g.traces], { ...layout, ...g.layout, showlegend: false },
+  plot(id, [{ x, y, mode: "lines", name }, ...g.traces], { ...layout, ...g.layout, showlegend: false },
     PLOTLY_CONFIG);
 }
 
@@ -302,9 +360,9 @@ function renderPumpCurve(pumpCurve, op, useM3d) {
   const flowTraces = rpmKeys.map((rpm) => rpmTrace(flowDict, rpm));
   flowTraces.push({
     x: [op.dp_psi], y: [opFlow],
-    mode: "markers", name: "Operating point", marker: { color: "red", size: 10 },
+    mode: "markers", name: "Operating point", marker: { symbol: "diamond", size: 11, color: "#0b0b0b", line: { color: "#fff", width: 2 } },
   });
-  Plotly.newPlot("chart-pump-flow", flowTraces, {
+  plot("chart-pump-flow", flowTraces, {
     title: `Liquid flow vs dP (${op.pump_model})`,
     xaxis: { title: "Differential pressure, dP (psi)" },
     yaxis: { title: `Flow (${flowUnit})` },
@@ -316,13 +374,13 @@ function renderPumpCurve(pumpCurve, op, useM3d) {
     { unit: "ft.lb" });
 
   const powerTraces = rpmKeys.map((rpm) => rpmTrace(pumpCurve.power_in_hp, rpm));
-  Plotly.newPlot("chart-pump-power", powerTraces, {
+  plot("chart-pump-power", powerTraces, {
     title: "Input power vs dP", xaxis: { title: "dP (psi)" }, yaxis: { title: "Power in (hp)" },
     shapes: [{ type: "line", x0: op.dp_psi, x1: op.dp_psi, y0: 0, y1: maxOfDict(pumpCurve.power_in_hp), line: { dash: "dot", color: "black" } }],
   }, PLOTLY_CONFIG);
 
   const effTraces = rpmKeys.map((rpm) => ({ ...rpmTrace(pumpCurve.efficiency, rpm), y: nan2null(pumpCurve.efficiency[rpm]) }));
-  Plotly.newPlot("chart-pump-efficiency", effTraces, {
+  plot("chart-pump-efficiency", effTraces, {
     title: "Efficiency vs dP", xaxis: { title: "dP (psi)" }, yaxis: { title: "Efficiency" },
     shapes: [{ type: "line", x0: op.dp_psi, x1: op.dp_psi, y0: 0, y1: 1, line: { dash: "dot", color: "black" } }],
   }, PLOTLY_CONFIG);
@@ -344,7 +402,7 @@ function renderStagePressures(op) {
   const n = p.length - 1;
   const seal = p.slice(1).map((v, i) => i + 1);
   const uniform = p.map((_, i) => p[0] + (p[n] - p[0]) * i / n);
-  Plotly.newPlot(el, [
+  plot(el, [
     { x: [...p.keys()], y: p, mode: "lines+markers", name: "Staged model" },
     { x: [...p.keys()], y: uniform, mode: "lines", name: "Uniform (no gas)", line: { dash: "dot" } },
     { x: seal, y: seal.map((i) => p[i] - p[i - 1]), mode: "lines", name: "dP across seal", yaxis: "y2" },
@@ -372,7 +430,7 @@ function renderWellbore(op) {
   const regimes = (pts) => [...new Set(pts.map((p) => p.regime))].join(" → ");
   const hover = (p) => `${fmt(p.depth_ft, 0)} ft<br>${fmt(p.pressure_psig, 1)} psig<br>holdup ${fmt(p.liquid_holdup, 2)}` +
     `<br>Vsg ${fmt(p.gas_velocity_m_s, 2)} m/s<br>${p.regime}`;
-  Plotly.newPlot(el, [
+  plot(el, [
     { x: tub.map((p) => p.pressure_psig), y: tub.map((p) => p.depth_ft), mode: "lines", name: "Tubing pressure",
       text: tub.map(hover), hoverinfo: "text", line: { color: "#1f77b4" } },
     { x: ann.map((p) => p.pressure_psig), y: ann.map((p) => p.depth_ft), mode: "lines", name: "Casing annulus pressure",
@@ -434,7 +492,7 @@ function renderInflowRpm(ir, op, useMeters, useM3d) {
   const axis = { gridcolor: C.grid, zerolinecolor: C.grid, linecolor: "#bdbcb6", tickfont: { color: C.ink },
     titlefont: { color: C.ink } };
 
-  Plotly.newPlot(el, [
+  plot(el, [
     band("Liquid", liquid, C.liquid),
     band("Gas at intake", gas, C.gas),
     band("Slip", slip, C.slip, { fillpattern: { shape: "/", fgcolor: fill(C.slip, 0.9), bgcolor: fill(C.slip, 0.3),
@@ -510,12 +568,12 @@ function renderSettingDepth(settingDepth, useMeters, useM3d) {
   const rateUnit = useM3d ? "m3/d" : "bpd";
   const rateDict = useM3d ? settingDepth.fixed_rpm_rate_m3d : settingDepth.fixed_rpm_rate_bpd;
 
-  Plotly.newPlot("chart-sd-rate", [{ x, y: nan2null(rateDict), mode: "lines", name: "Deliverable rate" }], {
+  plot("chart-sd-rate", [{ x, y: nan2null(rateDict), mode: "lines", name: "Deliverable rate" }], {
     title: `Deliverable liquid rate vs pump depth (fixed ${fmt(settingDepth.basis.rpm_fixed, 0)} RPM)`,
     xaxis: { title: `Pump depth (${xUnit})` }, yaxis: { title: `Rate (${rateUnit})` },
   }, PLOTLY_CONFIG);
 
-  Plotly.newPlot("chart-sd-rpm", [{ x, y: nan2null(settingDepth.required_rpm), mode: "lines", name: "Required RPM" }], {
+  plot("chart-sd-rpm", [{ x, y: nan2null(settingDepth.required_rpm), mode: "lines", name: "Required RPM" }], {
     title: "Required RPM vs pump depth", xaxis: { title: `Pump depth (${xUnit})` }, yaxis: { title: "RPM" },
   }, PLOTLY_CONFIG);
 }
@@ -532,7 +590,7 @@ function renderLegacyCharts(curvesData, op) {
   const flowTraces = rpms.map((rpm) => ({
     x: ls.lift_m, y: ls.flow_bpd[rpm], name: `${rpm} RPM`, mode: "lines",
   }));
-  Plotly.newPlot("chart-flow-lift", flowTraces, {
+  plot("chart-flow-lift", flowTraces, {
     title: "Flow vs Lift", xaxis: { title: "Lift (m)" }, yaxis: { title: "Flow (bpd)" },
     shapes: [{ type: "line", x0: opLiftM, x1: opLiftM, y0: 0, y1: Math.max(...ls.flow_bpd[rpms[rpms.length - 1]]), line: { dash: "dot", color: "black" } }],
   }, PLOTLY_CONFIG);
@@ -544,12 +602,12 @@ function renderLegacyCharts(curvesData, op) {
   for (const rpm of rpms) {
     powerTraces.push({ x: ls.lift_m, y: ls.power_in_hp[rpm], name: `Power in ${rpm} RPM`, mode: "lines" });
   }
-  Plotly.newPlot("chart-power-lift", powerTraces, {
+  plot("chart-power-lift", powerTraces, {
     title: "Power vs Lift", xaxis: { title: "Lift (m)" }, yaxis: { title: "Power (hp)" },
   }, PLOTLY_CONFIG);
 
   const effTraces = rpms.map((rpm) => ({ x: ls.lift_m, y: ls.efficiency[rpm], name: `${rpm} RPM`, mode: "lines" }));
-  Plotly.newPlot("chart-efficiency-lift", effTraces, {
+  plot("chart-efficiency-lift", effTraces, {
     title: "Efficiency vs Lift", xaxis: { title: "Lift (m)" }, yaxis: { title: "Efficiency" },
   }, PLOTLY_CONFIG);
 
@@ -600,7 +658,12 @@ async function analyze(payload) {
     renderTable(document.getElementById("imperial-table"), analyzeResult.imperial_report, IMPERIAL_ROWS);
     renderTable(document.getElementById("metric-table"), analyzeResult.metric_report, METRIC_ROWS);
     const mode = payload.options?.mode || "parity";
-    document.getElementById("results-heading").textContent = `Results — ${mode} mode`;
+    document.getElementById("results-mode").textContent = mode === "physics" ? "Physics mode" : "Workbook parity mode";
+    document.getElementById("results-heading").textContent = analyzeResult.imperial_report.pump_model || "Results";
+    const h = payload.header || {};
+    document.getElementById("results-job").textContent = [h.location, h.pad, h.well].filter(Boolean).join(" · ");
+    lastReports = { imperial: analyzeResult.imperial_report, metric: analyzeResult.metric_report };
+    renderKpis();
     const warningsEl = document.getElementById("warnings-notice");
     const warnings = analyzeResult.warnings || [];
     if (warnings.length) {
@@ -642,6 +705,17 @@ document.getElementById("load-case").addEventListener("change", async (ev) => {
   const payload = JSON.parse(text);
   payloadToForm(payload);
 });
+
+document.querySelectorAll("#unit-toggle button").forEach((btn) => {
+  btn.addEventListener("click", () => setUnits(btn.dataset.units));
+});
+setUnits(unitSystem);
+
+// A required field inside a collapsed input group cannot show its validation message: open the group.
+form.addEventListener("invalid", (ev) => {
+  const group = ev.target.closest("details");
+  if (group) group.open = true;
+}, true);
 
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
