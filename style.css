@@ -210,6 +210,19 @@ textarea { font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem; r
 }
 .ctl > .unit { border: 1px solid var(--line); border-left: none; padding: 0.38rem 0.5rem; display: flex; align-items: center; white-space: nowrap; }
 .ctl > select { padding-right: 0.2rem; }
+.ctl > .ctl-btn {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  background: var(--bg);
+  color: var(--teal);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 0.7rem;
+}
+.ctl > .ctl-btn:hover:not(:disabled) { border-color: var(--teal); }
+.ctl > .ctl-btn:disabled { color: var(--muted); cursor: default; opacity: 0.6; }
 
 .pair { display: flex; gap: 0.4rem; }
 .pair > * { flex: 1; min-width: 0; }

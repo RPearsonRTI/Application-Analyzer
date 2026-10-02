@@ -56,7 +56,7 @@ function formToPayload() {
   const well = { pump_model: data.get("pump_model") };
   for (const [key, value] of data.entries()) {
     if (["pump_model", "location", "pad", "well_name", "alpha_override", "oil_api_gravity",
-      "surface_earth_temp_c"].includes(key)) continue;
+      "surface_earth_temp_c", "engine_mode"].includes(key)) continue;
     if (key.startsWith("inflow_")) continue;
     well[key] = NUMERIC_FIELDS.has(key) && value !== "" ? Number(value) : value;
   }
@@ -539,7 +539,11 @@ function renderDrawdownCurve(drawdown, op, useMeters, useM3d, enteredFluidLevel)
   const desiredRate = useM3d ? basis.desired_rate_bpd / 6.2898 : basis.desired_rate_bpd;
   document.getElementById("drawdown-subtitle").textContent =
     `Held constant: pump depth ${fmt(basis.pump_depth_ft, 0)} ft, desired rate ${fmt(desiredRate, 1)} ${rateUnit}, ` +
-    `fixed RPM ${fmt(basis.rpm_fixed, 0)} for the deliverable-rate trace, ${basis.mode} mode.`;
+    `fixed RPM ${fmt(basis.rpm_fixed, 0)} for the deliverable-rate trace, ${basis.mode} mode.` +
+    (drawdown.required_rpm.some((v) => v === null)
+      ? " Where a line is missing, the intake pressure is at or above the discharge pressure: the well would flow" +
+        " without the pump, so there is no pump operating point."
+      : "");
 
   const x = useMeters ? drawdown.fluid_level_m : drawdown.fluid_level_ft;
   const xUnit = useMeters ? "m" : "ft";
@@ -687,16 +691,50 @@ form.addEventListener("submit", (ev) => {
   analyze(formToPayload());
 });
 
-document.getElementById("save-case").addEventListener("click", () => {
+// Default file name for a saved case: the job details and the pump model, e.g. "NABEP - IAV JS - 02 - R65-1200.json".
+function caseFileName(payload) {
+  const h = payload.header || {};
+  const parts = [h.location, h.pad, h.well, payload.well.pump_model].filter(Boolean)
+    .map((s) => String(s).replace(/[\\/:*?"<>|]+/g, " ").trim()).filter(Boolean);
+  return `${parts.join(" - ") || "RTI case"}.json`;
+}
+
+document.getElementById("save-case").addEventListener("click", async () => {
   const payload = formToPayload();
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
+  const text = JSON.stringify(payload, null, 2);
+  const name = caseFileName(payload);
+  // Chrome and Edge: a real "Save as" box with the name pre-filled and editable.
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: "RTI case", accept: { "application/json": [".json"] } }],
+      });
+      const stream = await handle.createWritable();
+      await stream.write(text);
+      await stream.close();
+      statusEl.textContent = `Saved ${handle.name}.`;
+    } catch (err) {
+      if (err.name !== "AbortError") statusEl.textContent = `Could not save: ${err.message}`;
+    }
+    return;
+  }
+  // Safari and Firefox have no such box: download with the default name (the browser decides where it goes).
+  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = "case.json";
+  a.download = name;
   a.click();
   URL.revokeObjectURL(url);
 });
+
+// Alpha override: an empty field means the engine default; the Reset button empties it.
+const alphaInput = form.elements["alpha_override"];
+const alphaReset = document.getElementById("alpha-reset");
+const syncAlphaReset = () => { alphaReset.disabled = alphaInput.value === ""; };
+alphaInput.addEventListener("input", syncAlphaReset);
+alphaReset.addEventListener("click", () => { alphaInput.value = ""; syncAlphaReset(); alphaInput.focus(); });
+syncAlphaReset();
 
 document.getElementById("load-case").addEventListener("change", async (ev) => {
   const file = ev.target.files[0];
@@ -704,6 +742,9 @@ document.getElementById("load-case").addEventListener("change", async (ev) => {
   const text = await file.text();
   const payload = JSON.parse(text);
   payloadToForm(payload);
+  syncAlphaReset();
+  ev.target.value = "";            // so the same file can be loaded again
+  analyze(formToPayload());
 });
 
 document.querySelectorAll("#unit-toggle button").forEach((btn) => {

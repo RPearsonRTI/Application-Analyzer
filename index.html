@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Rotoliptic Application Analyzer</title>
 <link rel="icon" type="image/png" href="img/rotoliptic-mark.png" />
-<link rel="stylesheet" href="style.css?v=10" />
+<link rel="stylesheet" href="style.css?v=11" />
 <script src="vendor/plotly-2.35.2.min.js"></script>
 </head>
 <body>
@@ -38,8 +38,9 @@
           <label class="field full"><span class="field-label">Model</span>
             <select name="pump_model" id="pump_model"></select>
           </label>
-          <label class="field full"><span class="field-label">Alpha override <small>optional</small></span>
-            <input type="number" step="any" name="alpha_override" placeholder="engine default" />
+          <label class="field full"><span class="field-label">Alpha override <small>optional; leave blank for the engine default</small></span>
+            <span class="ctl"><input type="number" step="any" name="alpha_override" placeholder="engine default" />
+              <button type="button" id="alpha-reset" class="ctl-btn" title="Clear the override and use the engine default">Reset</button></span>
           </label>
         </div>
       </details>
@@ -309,6 +310,6 @@
 </main>
 
 <script src="engine-browser.js"></script>
-<script src="app.js?v=23"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>
