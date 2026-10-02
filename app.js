@@ -129,6 +129,7 @@ function parseInflowPoints(text) {
 
 function payloadToForm(payload) {
   const well = payload.well || {};
+  form.elements["gor_unit"].value = "sm3/m3";          // cases saved before the scf/bbl option have no unit
   for (const [key, value] of Object.entries(well)) {
     if (Array.isArray(value)) continue;
     const el = form.elements[key];

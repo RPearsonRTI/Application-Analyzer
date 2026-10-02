@@ -72,7 +72,8 @@
             <span class="ctl"><input type="number" step="any" name="water_cut_pct" value="90" required /><span class="unit">%</span></span>
           </label>
           <label class="field"><span class="field-label">GOR</span>
-            <span class="ctl"><input type="number" step="any" name="gor_sm3_m3" value="13" required /><span class="unit">sm3/m3</span></span>
+            <span class="ctl"><input type="number" step="any" name="gor_sm3_m3" value="13" required />
+              <select name="gor_unit"><option value="sm3/m3" selected>sm3/m3</option><option value="scf/bbl">scf/bbl</option></select></span>
           </label>
           <label class="field"><span class="field-label">Reservoir temperature</span>
             <span class="ctl"><input type="number" step="any" name="reservoir_temp" value="70" required />
@@ -310,6 +311,6 @@
 </main>
 
 <script src="engine-browser.js"></script>
-<script src="app.js?v=24"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>
