@@ -236,10 +236,9 @@ textarea { font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem; r
   margin: 0.9rem 0;
 }
 .estimate-box .box-title { margin: 0 0 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--teal); }
-.estimate-box .btn-outline { margin: 0.65rem 0 0.5rem; width: 100%; background: var(--surface); }
 .estimate-box .hint:last-child { margin-bottom: 0; }
-#estimate-note > div { margin-top: 0.35rem; }
-input.estimated { border-color: var(--lime-dark); box-shadow: 0 0 0 3px rgba(172, 190, 21, 0.35); }
+input.assumed { border-color: var(--lime-dark); background: var(--lime-soft); }
+input::placeholder { color: #a3a698; }
 
 .action-bar {
   position: sticky;
@@ -404,3 +403,31 @@ input.estimated { border-color: var(--lime-dark); box-shadow: 0 0 0 3px rgba(172
   .topbar { padding: 0 0.8rem; }
   .brand img { height: 24px; }
 }
+
+/* --- Assumptions tab and rating flags ---------------------------------------------------------- */
+
+.count {
+  display: inline-block;
+  min-width: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--teal);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+.table-scroll { overflow-x: auto; }
+.data-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+.data-table th, .data-table td { text-align: left; vertical-align: top; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); }
+.data-table thead th { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.data-table td.num { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.data-table td.basis { color: var(--grey); min-width: 16rem; }
+.tag { display: inline-block; border-radius: 999px; padding: 0.05rem 0.55rem; font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+.tag.given { background: var(--bg); color: var(--muted); }
+.tag.estimated { background: var(--lime-soft); color: var(--lime-dark); }
+.tag.assumed { background: var(--warn-bg); color: var(--warn-ink); }
+
+.kpi-note { font-size: 0.75rem; color: rgba(255, 255, 255, 0.7); margin-top: 0.1rem; white-space: nowrap; }
+.kpi.over .kpi-value, .kpi.over .kpi-note { color: #ffcf5c; }
+.kpi.over .kpi-note { font-weight: 700; }

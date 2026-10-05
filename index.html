@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Rotoliptic Application Analyzer</title>
 <link rel="icon" type="image/png" href="img/rotoliptic-mark.png" />
-<link rel="stylesheet" href="style.css?v=11" />
+<link rel="stylesheet" href="style.css?v=12" />
 <script src="vendor/plotly-2.35.2.min.js"></script>
 </head>
 <body>
@@ -61,7 +61,7 @@
               <select name="flowline_pressure_unit"><option value="psig" selected>psig</option><option value="kPa">kPa</option><option value="Pa">Pa</option></select></span>
           </label>
           <label class="field"><span class="field-label">Casing pressure</span>
-            <span class="ctl"><input type="number" step="any" name="casing_pressure" value="150" required />
+            <span class="ctl"><input type="number" step="any" name="casing_pressure" value="150" placeholder="auto" />
               <select name="casing_pressure_unit"><option value="psig" selected>psig</option><option value="kPa">kPa</option><option value="Pa">Pa</option></select></span>
           </label>
           <label class="field"><span class="field-label">Desired rate</span>
@@ -76,13 +76,16 @@
               <select name="gor_unit"><option value="sm3/m3" selected>sm3/m3</option><option value="scf/bbl">scf/bbl</option></select></span>
           </label>
           <label class="field"><span class="field-label">Reservoir temperature</span>
-            <span class="ctl"><input type="number" step="any" name="reservoir_temp" value="70" required />
+            <span class="ctl"><input type="number" step="any" name="reservoir_temp" value="70" placeholder="auto" />
               <select name="reservoir_temp_unit"><option value="C" selected>°C</option><option value="F">°F</option></select></span>
           </label>
         </div>
 
         <div class="estimate-box">
-          <p class="box-title">Estimate from CRD data</p>
+          <p class="box-title">Leave a field blank to have it filled in</p>
+          <p class="hint">Fields showing <em>auto</em> are estimated or assumed when left blank, then outlined here and
+            listed with their basis under the Assumptions tab. Type a value to override one; clear it to go back
+            to auto. The two inputs below feed the estimates.</p>
           <div class="fields">
             <label class="field"><span class="field-label">Oil API gravity</span>
               <input type="number" step="any" name="oil_api_gravity" placeholder="e.g. 13.5" />
@@ -91,22 +94,18 @@
               <span class="ctl"><input type="number" step="any" name="surface_earth_temp_c" value="10" /><span class="unit">°C</span></span>
             </label>
           </div>
-          <button type="button" id="estimate-btn" class="btn-outline">Estimate the three fields below</button>
-          <p class="hint">Uses API gravity, reservoir temperature and water cut, plus the depth, rate and wellbore
-            sizes. Fills the fields for you to review; nothing else changes.</p>
-          <div id="estimate-note" class="hint" hidden></div>
         </div>
 
         <div class="fields">
           <label class="field"><span class="field-label">Viscosity</span>
-            <span class="ctl"><input type="number" step="any" name="viscosity_cp" value="1" /><span class="unit">cP</span></span>
+            <span class="ctl"><input type="number" step="any" name="viscosity_cp" value="1" placeholder="auto" /><span class="unit">cP</span></span>
           </label>
           <label class="field"><span class="field-label">Wellhead temperature</span>
-            <span class="ctl"><input type="number" step="any" name="wellhead_temp" value="60" required />
+            <span class="ctl"><input type="number" step="any" name="wellhead_temp" value="60" placeholder="auto" />
               <select name="wellhead_temp_unit"><option value="C">°C</option><option value="F" selected>°F</option></select></span>
           </label>
           <label class="field full"><span class="field-label">Gas through annulus</span>
-            <span class="ctl"><input type="number" step="any" name="gas_through_annulus_pct" value="50" required /><span class="unit">%</span></span>
+            <span class="ctl"><input type="number" step="any" name="gas_through_annulus_pct" value="50" placeholder="auto" /><span class="unit">%</span></span>
           </label>
         </div>
       </details>
@@ -115,25 +114,25 @@
         <summary>Wellbore and rods <small>physics mode</small></summary>
         <div class="fields">
           <label class="field"><span class="field-label">Tubing ID</span>
-            <span class="ctl"><input type="number" step="any" name="tubing_id_in" value="2.441" /><span class="unit">in</span></span>
+            <span class="ctl"><input type="number" step="any" name="tubing_id_in" placeholder="auto" /><span class="unit">in</span></span>
           </label>
           <label class="field"><span class="field-label">Tubing OD</span>
-            <span class="ctl"><input type="number" step="any" name="tubing_od_in" value="2.875" /><span class="unit">in</span></span>
+            <span class="ctl"><input type="number" step="any" name="tubing_od_in" placeholder="auto" /><span class="unit">in</span></span>
           </label>
           <label class="field"><span class="field-label">Casing ID</span>
-            <span class="ctl"><input type="number" step="any" name="casing_id_in" value="4.892" /><span class="unit">in</span></span>
+            <span class="ctl"><input type="number" step="any" name="casing_id_in" placeholder="auto" /><span class="unit">in</span></span>
           </label>
           <label class="field"><span class="field-label">Rod diameter <small>0 = rodless</small></span>
-            <span class="ctl"><input type="number" step="any" name="rod_od_in" value="1.0" /><span class="unit">in</span></span>
+            <span class="ctl"><input type="number" step="any" name="rod_od_in" placeholder="auto" /><span class="unit">in</span></span>
           </label>
           <label class="field full"><span class="field-label">Rod coupling OD <small>at or below the rod diameter = continuous rod</small></span>
-            <span class="ctl"><input type="number" step="any" name="coupling_od_in" value="2.0" /><span class="unit">in</span></span>
+            <span class="ctl"><input type="number" step="any" name="coupling_od_in" placeholder="auto" /><span class="unit">in</span></span>
           </label>
           <label class="field"><span class="field-label">Dogleg severity <small>assumed</small></span>
-            <span class="ctl"><input type="number" step="any" name="dogleg_severity_deg_per_100ft" value="1.0" /><span class="unit">°/100 ft</span></span>
+            <span class="ctl"><input type="number" step="any" name="dogleg_severity_deg_per_100ft" placeholder="auto" /><span class="unit">°/100 ft</span></span>
           </label>
           <label class="field"><span class="field-label">Rod-tubing friction</span>
-            <input type="number" step="any" name="rod_tubing_friction" value="0.2" />
+            <input type="number" step="any" name="rod_tubing_friction" placeholder="auto" />
           </label>
         </div>
       </details>
@@ -245,6 +244,7 @@
         <button type="button" class="tab-btn active" data-tab="tab-pump">Pump curve</button>
         <button type="button" class="tab-btn" data-tab="tab-drawdown">Well drawdown</button>
         <button type="button" class="tab-btn" data-tab="tab-results">Full results</button>
+        <button type="button" class="tab-btn" data-tab="tab-assumptions">Assumptions <span id="assumption-count" class="count" hidden></span></button>
         <button type="button" class="tab-btn" data-tab="tab-legacy">Legacy lift sweep</button>
       </div>
 
@@ -296,6 +296,12 @@
         <div id="chart-title"></div>
       </div>
 
+      <div class="chart-group" id="tab-assumptions">
+        <p id="assumptions-summary" class="chart-subtitle"></p>
+        <div class="table-scroll"><table id="assumptions-table" class="data-table"></table></div>
+        <p id="assumptions-notes" class="chart-subtitle"></p>
+      </div>
+
       <div class="chart-group" id="tab-legacy">
         <p class="chart-subtitle">The Excel analyzer's lift sweep. It holds no gas.</p>
         <div class="chart-grid">
@@ -311,6 +317,6 @@
 </main>
 
 <script src="engine-browser.js"></script>
-<script src="app.js?v=25"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

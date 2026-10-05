@@ -8,6 +8,13 @@ const statusEl = document.getElementById("status");
 let lastPayload = null;
 let lastCurvesContext = null;
 
+// Inputs that may be left blank: /assume estimates or assumes them (src/rti_app/assumptions.py).
+const AUTO_FIELDS = [
+  "casing_pressure", "reservoir_temp", "viscosity_cp", "wellhead_temp", "gas_through_annulus_pct",
+  "tubing_id_in", "tubing_od_in", "casing_id_in", "rod_od_in", "coupling_od_in",
+  "dogleg_severity_deg_per_100ft", "rod_tubing_friction",
+];
+
 const NUMERIC_FIELDS = new Set([
   "pump_depth", "fluid_level", "flowline_pressure", "casing_pressure", "desired_rate",
   "viscosity_cp", "water_cut_pct", "gor_sm3_m3", "gas_through_annulus_pct",
@@ -58,7 +65,8 @@ function formToPayload() {
     if (["pump_model", "location", "pad", "well_name", "alpha_override", "oil_api_gravity",
       "surface_earth_temp_c", "engine_mode"].includes(key)) continue;
     if (key.startsWith("inflow_")) continue;
-    well[key] = NUMERIC_FIELDS.has(key) && value !== "" ? Number(value) : value;
+    const auto = form.elements[key].classList && form.elements[key].classList.contains("assumed");
+    well[key] = auto || value === "" ? (NUMERIC_FIELDS.has(key) ? null : value) : (NUMERIC_FIELDS.has(key) ? Number(value) : value);
   }
   Object.assign(well, inflowPayload(data));
   const alphaRaw = data.get("alpha_override");
@@ -129,6 +137,8 @@ function parseInflowPoints(text) {
 
 function payloadToForm(payload) {
   const well = payload.well || {};
+  form.querySelectorAll("input.assumed").forEach((el) => el.classList.remove("assumed"));
+  for (const name of AUTO_FIELDS) form.elements[name].value = "";   // absent or null in the case = auto
   form.elements["gor_unit"].value = "sm3/m3";          // cases saved before the scf/bbl option have no unit
   for (const [key, value] of Object.entries(well)) {
     if (Array.isArray(value)) continue;
@@ -174,6 +184,9 @@ const IMPERIAL_ROWS = [
   ["Tubing head pressure (psig)", "tubing_head_pressure_psig", 1],
   ["Casing head pressure (psig)", "casing_head_pressure_psig", 1],
   ["dP (psi)", "dp_psi", 2],
+  ["dP per stage (psi)", "dp_per_stage_psi", 1],
+  ["Pump pressure loading (% of rating)", "pressure_loading", 0, 100],
+  ["Speed (% of rated maximum)", "speed_loading", 0, 100],
   ["Generated lift (ft)", "lift_ft", 1],
   ["Rate (bpd)", "rate_bpd", 1],
   ["RPM", "rpm", 1],
@@ -202,6 +215,9 @@ const METRIC_ROWS = [
   ["Tubing head pressure (kPa)", "tubing_head_pressure_kpa", 1],
   ["Casing head pressure (kPa)", "casing_head_pressure_kpa", 1],
   ["dP (kPa)", "dp_kpa", 2],
+  ["dP per stage (kPa)", "dp_per_stage_kpa", 0],
+  ["Pump pressure loading (% of rating)", "pressure_loading", 0, 100],
+  ["Speed (% of rated maximum)", "speed_loading", 0, 100],
   ["Lift (m)", "lift_m", 1],
   ["Rate (m3/d)", "rate_m3d", 1],
   ["RPM", "rpm", 1],
@@ -221,13 +237,13 @@ const METRIC_ROWS = [
 
 function renderTable(tableEl, report, rows) {
   tableEl.innerHTML = "";
-  for (const [label, key, digits] of rows) {
+  for (const [label, key, digits, mult] of rows) {
     const tr = document.createElement("tr");
     const th = document.createElement("th");
     th.textContent = label;
     const td = document.createElement("td");
     const v = report[key];
-    td.textContent = typeof v === "number" ? fmt(v, digits) : (v ?? "-");
+    td.textContent = typeof v === "number" ? fmt(v * (mult ?? 1), digits) : (v ?? "-");
     tr.appendChild(th);
     tr.appendChild(td);
     tableEl.appendChild(tr);
@@ -256,15 +272,15 @@ function plot(id, traces, layout, config) {
   return Plotly.newPlot(id, traces, { template: PLOT_TEMPLATE, ...layout }, config ?? PLOTLY_CONFIG);
 }
 
-// Headline numbers in the results band: [label, report key, unit, digits, multiplier].
+// Headline numbers in the results band: [label, report key, unit, digits, multiplier, rating-loading key].
 const KPI_DEFS = {
   imperial: [
-    ["Speed", "rpm", "RPM", 0], ["Torque", "torque_ftlb", "ft·lb", 0], ["Power", "power_hp", "hp", 1],
-    ["Pump dP", "dp_psi", "psi", 0], ["Inlet GVF", "inlet_gvf", "%", 1, 100], ["Vol. efficiency", "ve", "%", 1, 100],
+    ["Speed", "rpm", "RPM", 0, 1, "speed_loading"], ["Torque", "torque_ftlb", "ft·lb", 0], ["Power", "power_hp", "hp", 1],
+    ["Pump dP", "dp_psi", "psi", 0, 1, "pressure_loading"], ["Inlet GVF", "inlet_gvf", "%", 1, 100], ["Vol. efficiency", "ve", "%", 1, 100],
   ],
   metric: [
-    ["Speed", "rpm", "RPM", 0], ["Torque", "torque_nm", "N·m", 0], ["Power", "power_kw", "kW", 1],
-    ["Pump dP", "dp_kpa", "kPa", 0], ["Inlet GVF", "inlet_gvf", "%", 1, 100], ["Vol. efficiency", "ve", "%", 1, 100],
+    ["Speed", "rpm", "RPM", 0, 1, "speed_loading"], ["Torque", "torque_nm", "N·m", 0], ["Power", "power_kw", "kW", 1],
+    ["Pump dP", "dp_kpa", "kPa", 0, 1, "pressure_loading"], ["Inlet GVF", "inlet_gvf", "%", 1, 100], ["Vol. efficiency", "ve", "%", 1, 100],
   ],
 };
 let lastReports = null;
@@ -276,12 +292,19 @@ function renderKpis() {
   el.innerHTML = "";
   if (!lastReports) return;
   const report = lastReports[unitSystem];
-  for (const [label, key, unit, digits, mult] of KPI_DEFS[unitSystem]) {
+  for (const [label, key, unit, digits, mult, loadKey] of KPI_DEFS[unitSystem]) {
     const v = report[key];
     const tile = document.createElement("div");
     tile.className = "kpi";
     const text = typeof v === "number" && Number.isFinite(v) ? fmt(v * (mult ?? 1), digits) : "–";
-    tile.innerHTML = `<div class="kpi-label">${label}</div><div class="kpi-value">${text}<span class="kpi-unit">${unit}</span></div>`;
+    // Speed and dP are shown against the pump's ratings; over 100 % is flagged, not blocked.
+    const load = loadKey ? report[loadKey] : null;
+    let note = "";
+    if (typeof load === "number" && load > 0) {
+      if (load > 1) tile.classList.add("over");
+      note = `<div class="kpi-note">${fmt(load * 100, 0)}% of rating${load > 1 ? " — over" : ""}</div>`;
+    }
+    tile.innerHTML = `<div class="kpi-label">${label}</div><div class="kpi-value">${text}<span class="kpi-unit">${unit}</span></div>${note}`;
     el.appendChild(tile);
   }
 }
@@ -687,9 +710,80 @@ async function analyze(payload) {
   }
 }
 
+// Fill the blanks (estimates and documented defaults), show them, then analyse the completed well.
+async function run() {
+  const raw = formToPayload();
+  statusEl.textContent = "Running...";
+  let resolved;
+  try {
+    resolved = await api("/assume", {
+      well: raw.well, oil_api_gravity: raw.oil_api_gravity,
+      surface_earth_temp_c: num(form.elements["surface_earth_temp_c"].value) ?? 10,
+    });
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message}`;
+    return;
+  }
+  for (const item of resolved.inputs) {
+    const el = form.elements[item.field];
+    if (!el || !AUTO_FIELDS.includes(item.field)) continue;
+    if (item.source === "given") {
+      el.classList.remove("assumed");
+      el.title = "";
+    } else {
+      el.value = item.value;
+      el.classList.add("assumed");
+      el.title = `${item.source === "estimated" ? "Estimated" : "Assumed"}: ${item.basis}`;
+    }
+  }
+  for (const unitField of ["casing_pressure_unit"]) {
+    if (resolved.well[unitField]) form.elements[unitField].value = resolved.well[unitField];
+  }
+  renderAssumptions(resolved);
+  await analyze({ ...raw, well: resolved.well });
+}
+
+function renderAssumptions(resolved) {
+  const filled = resolved.inputs.filter((i) => i.source !== "given");
+  const count = document.getElementById("assumption-count");
+  count.textContent = filled.length;
+  count.hidden = filled.length === 0;
+  const nEst = filled.filter((i) => i.source === "estimated").length;
+  document.getElementById("assumptions-summary").textContent = filled.length
+    ? `${filled.length} of ${resolved.inputs.length} inputs were not given: ${nEst} estimated from the other inputs, ` +
+      `${filled.length - nEst} assumed. Enter a value in the form to replace any of them.`
+    : "Every input was entered; nothing was estimated or assumed.";
+  const table = document.getElementById("assumptions-table");
+  table.innerHTML = "<thead><tr><th>Input</th><th>Value</th><th>Source</th><th>Basis</th></tr></thead>";
+  const body = document.createElement("tbody");
+  const order = { assumed: 0, estimated: 1, given: 2 };
+  for (const i of [...resolved.inputs].sort((x, y) => order[x.source] - order[y.source])) {
+    const tr = document.createElement("tr");
+    const cell = (text, cls) => { const td = document.createElement("td"); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td; };
+    cell(i.label);
+    cell(`${fmt(i.value, 4)} ${i.unit}`.trim(), "num");
+    const tag = document.createElement("span");
+    tag.className = `tag ${i.source}`;
+    tag.textContent = i.source[0].toUpperCase() + i.source.slice(1);
+    cell("").appendChild(tag);
+    cell(i.source === "given" ? "Entered" : i.basis, "basis");
+    body.appendChild(tr);
+  }
+  table.appendChild(body);
+  document.getElementById("assumptions-notes").textContent = (resolved.notes || []).join(" ");
+}
+
+// Typing in an auto-filled field makes it the user's value; clearing a field returns it to auto.
+for (const name of AUTO_FIELDS) {
+  form.elements[name].addEventListener("input", (ev) => {
+    ev.target.classList.remove("assumed");
+    ev.target.title = "";
+  });
+}
+
 form.addEventListener("submit", (ev) => {
   ev.preventDefault();
-  analyze(formToPayload());
+  run();
 });
 
 // Default file name for a saved case: the job details and the pump model, e.g. "NABEP - IAV JS - 02 - R65-1200.json".
@@ -745,7 +839,7 @@ document.getElementById("load-case").addEventListener("change", async (ev) => {
   payloadToForm(payload);
   syncAlphaReset();
   ev.target.value = "";            // so the same file can be loaded again
-  analyze(formToPayload());
+  run();
 });
 
 document.querySelectorAll("#unit-toggle button").forEach((btn) => {
@@ -797,40 +891,6 @@ document.getElementById("setting-depth-compute").addEventListener("click", async
   }
 });
 
-// Estimate helper (src/rti_app/estimates.py): fills viscosity, wellhead temperature and annulus gas for review.
-document.getElementById("estimate-btn").addEventListener("click", async () => {
-  const note = document.getElementById("estimate-note");
-  const payload = formToPayload();
-  if (!payload.oil_api_gravity) {
-    note.hidden = false;
-    note.textContent = "Enter the oil API gravity first.";
-    return;
-  }
-  try {
-    const est = await postJson("/estimate", {
-      well: payload.well, oil_api_gravity: payload.oil_api_gravity,
-      surface_earth_temp_c: num(form.elements["surface_earth_temp_c"].value) ?? 10,
-    });
-    const set = (name, v, digits) => {
-      const el = form.elements[name];
-      el.value = Number(v.toFixed(digits));
-      el.classList.add("estimated");
-    };
-    set("viscosity_cp", est.viscosity_cp, est.viscosity_cp < 10 ? 2 : 1);
-    set("wellhead_temp", est.wellhead_temp, 0);
-    set("gas_through_annulus_pct", est.gas_through_annulus_pct, 0);
-    note.hidden = false;
-    note.innerHTML = est.notes.map((n) => `<div>${n}</div>`).join("") +
-      "<div>Estimated fields are outlined; click Analyze to use them.</div>";
-  } catch (err) {
-    note.hidden = false;
-    note.textContent = `Estimate failed: ${err.message}`;
-  }
-});
-for (const name of ["viscosity_cp", "wellhead_temp", "gas_through_annulus_pct"]) {
-  form.elements[name].addEventListener("input", (ev) => ev.target.classList.remove("estimated"));
-}
-
 form.elements["inflow_source"].addEventListener("change", showInflowBlocks);
 showInflowBlocks();
 if (browserEngine) {
@@ -841,6 +901,6 @@ if (browserEngine) {
   browserEngine.setProgress((text) => { statusEl.textContent = text; });
   browserEngine.ready.then(() => { analyzeBtn.disabled = false; });
 }
-loadCatalog().then(() => analyze(formToPayload())).catch((err) => {
+loadCatalog().then(() => run()).catch((err) => {
   statusEl.textContent = `Could not start: ${err.message}`;
 });
