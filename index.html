@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Rotoliptic Application Analyzer</title>
 <link rel="icon" type="image/png" href="img/rotoliptic-mark.png" />
-<link rel="stylesheet" href="style.css?v=12" />
+<link rel="stylesheet" href="style.css?v=14" />
 <script src="vendor/plotly-2.35.2.min.js"></script>
 </head>
 <body>
@@ -38,6 +38,27 @@
           <label class="field full"><span class="field-label">Model</span>
             <select name="pump_model" id="pump_model"></select>
           </label>
+          <div id="design-block" class="field full" hidden>
+            <p class="hint">Sizes a pump that does not exist yet: the cross-section and pitch are solved from the
+              displacement, rated lift and length, and its slip and torque coefficients are scaled from the tested
+              pumps. See the Pump design tab.</p>
+            <div class="fields">
+              <label class="field"><span class="field-label">Displacement <small>per 100 RPM</small></span>
+                <span class="ctl"><input type="number" step="any" min="1" name="design_displacement" value="100" /><span class="unit">m3/d</span></span>
+              </label>
+              <label class="field"><span class="field-label">Rated lift <small>35 m per stage</small></span>
+                <span class="ctl"><input type="number" step="any" min="1" name="design_lift_m" value="1200" /><span class="unit">m</span></span>
+              </label>
+              <label class="field"><span class="field-label">Pump length</span>
+                <span class="ctl"><input type="number" step="any" min="1" name="design_length_in" value="220" /><span class="unit">in</span></span>
+              </label>
+              <label class="field"><span class="field-label">Max stator OD <small>optional</small></span>
+                <span class="ctl"><input type="number" step="any" name="design_max_od_in" placeholder="no limit" /><span class="unit">in</span></span>
+              </label>
+            </div>
+            <button type="button" id="optimize-btn" class="btn-outline">Find the most efficient design for this well</button>
+            <p id="optimize-note" class="hint" hidden></p>
+          </div>
           <label class="field full"><span class="field-label">Alpha override <small>optional; leave blank for the engine default</small></span>
             <span class="ctl"><input type="number" step="any" name="alpha_override" placeholder="engine default" />
               <button type="button" id="alpha-reset" class="ctl-btn" title="Clear the override and use the engine default">Reset</button></span>
@@ -243,6 +264,7 @@
       <div class="chart-tabs" role="tablist">
         <button type="button" class="tab-btn active" data-tab="tab-pump">Pump curve</button>
         <button type="button" class="tab-btn" data-tab="tab-drawdown">Well drawdown</button>
+        <button type="button" class="tab-btn" data-tab="tab-design" id="tab-design-btn" hidden>Pump design</button>
         <button type="button" class="tab-btn" data-tab="tab-results">Full results</button>
         <button type="button" class="tab-btn" data-tab="tab-assumptions">Assumptions <span id="assumption-count" class="count" hidden></span></button>
         <button type="button" class="tab-btn" data-tab="tab-legacy">Legacy lift sweep</button>
@@ -296,6 +318,15 @@
         <div id="chart-title"></div>
       </div>
 
+      <div class="chart-group" id="tab-design">
+        <p id="design-summary" class="chart-subtitle"></p>
+        <div class="design-layout">
+          <div id="chart-design" class="chart"></div>
+          <div class="table-scroll"><table id="design-table" class="data-table"></table></div>
+        </div>
+        <ul id="design-basis" class="plain-list"></ul>
+      </div>
+
       <div class="chart-group" id="tab-assumptions">
         <p id="assumptions-summary" class="chart-subtitle"></p>
         <div class="table-scroll"><table id="assumptions-table" class="data-table"></table></div>
@@ -317,6 +348,6 @@
 </main>
 
 <script src="engine-browser.js"></script>
-<script src="app.js?v=26"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>

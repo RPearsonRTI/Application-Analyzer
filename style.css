@@ -431,3 +431,14 @@ input::placeholder { color: #a3a698; }
 .kpi-note { font-size: 0.75rem; color: rgba(255, 255, 255, 0.7); margin-top: 0.1rem; white-space: nowrap; }
 .kpi.over .kpi-value, .kpi.over .kpi-note { color: #ffcf5c; }
 .kpi.over .kpi-note { font-weight: 700; }
+
+/* --- Pump design tab ----------------------------------------------------------------------------- */
+
+.design-layout { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+.design-layout > .chart { flex: 1 1 380px; min-height: 420px; }
+.design-layout > .table-scroll { flex: 1 1 320px; }
+.plain-list { margin: 1rem 0 0; padding-left: 1.1rem; font-size: 0.9rem; color: var(--grey); display: grid; gap: 0.3rem; }
+.plain-list li.flag { color: var(--warn-ink); font-weight: 600; }
+#design-block .hint { margin-bottom: 0.6rem; }
+#optimize-btn { width: 100%; margin: 0.7rem 0 0.4rem; }
+#optimize-btn:disabled { opacity: 0.6; cursor: progress; }

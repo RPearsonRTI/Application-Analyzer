@@ -23,6 +23,22 @@ const NUMERIC_FIELDS = new Set([
   "coupling_od_in", "dogleg_severity_deg_per_100ft", "rod_tubing_friction",
 ]);
 
+// Pump select value for a pump sized on the fly (src/rti_app/pump_design.py) and its form fields.
+const DESIGN_OPTION = "__design__";
+const DESIGN_FIELDS = ["design_displacement", "design_lift_m", "design_length_in", "design_max_od_in"];
+const showDesignBlock = () => { document.getElementById("design-block").hidden = pumpSelect.value !== DESIGN_OPTION; };
+pumpSelect.addEventListener("change", showDesignBlock);
+
+function designPayload(data) {
+  if (data.get("pump_model") !== DESIGN_OPTION) return null;
+  return {
+    displacement_m3d_per_100rpm: num(data.get("design_displacement")),
+    rated_lift_m: num(data.get("design_lift_m")),
+    length_in: num(data.get("design_length_in")) ?? 220,
+    max_stator_od_in: num(data.get("design_max_od_in")),
+  };
+}
+
 // One door to the engine: the API server normally, or the in-browser engine (engine-browser.js, GitHub Pages
 // build) when that script is on the page. Returns the parsed body or throws with the server's error detail.
 const browserEngine = window.rtiBrowserEngine || null;
@@ -55,15 +71,20 @@ async function loadCatalog() {
     opt.textContent = `${p.model} (${p.series}, ${p.stages.toFixed(1)} stages, ${p.gal_per_rev} gal/rev)`;
     pumpSelect.appendChild(opt);
   }
+  const opt = document.createElement("option");
+  opt.value = DESIGN_OPTION;
+  opt.textContent = "New design (a pump not yet built)…";
+  pumpSelect.appendChild(opt);
   pumpSelect.value = "R200-1300";
 }
 
 function formToPayload() {
   const data = new FormData(form);
-  const well = { pump_model: data.get("pump_model") };
+  const pumpDesign = designPayload(data);
+  const well = { pump_model: pumpDesign ? "Design" : data.get("pump_model") };
   for (const [key, value] of data.entries()) {
     if (["pump_model", "location", "pad", "well_name", "alpha_override", "oil_api_gravity",
-      "surface_earth_temp_c", "engine_mode"].includes(key)) continue;
+      "surface_earth_temp_c", "engine_mode", ...DESIGN_FIELDS].includes(key)) continue;
     if (key.startsWith("inflow_")) continue;
     const auto = form.elements[key].classList && form.elements[key].classList.contains("assumed");
     well[key] = auto || value === "" ? (NUMERIC_FIELDS.has(key) ? null : value) : (NUMERIC_FIELDS.has(key) ? Number(value) : value);
@@ -79,6 +100,7 @@ function formToPayload() {
     },
     alpha_override: alphaRaw ? Number(alphaRaw) : null,
     oil_api_gravity: num(data.get("oil_api_gravity")),
+    pump_design: pumpDesign,
     options: { mode: data.get("engine_mode") || "parity" },
   };
   return payload;
@@ -163,6 +185,15 @@ function payloadToForm(payload) {
     form.elements["alpha_override"].value = payload.alpha_override ?? "";
   }
   form.elements["oil_api_gravity"].value = payload.oil_api_gravity ?? "";
+  const pd = payload.pump_design;
+  if (pd) {
+    pumpSelect.value = DESIGN_OPTION;
+    form.elements["design_displacement"].value = pd.displacement_m3d_per_100rpm ?? "";
+    form.elements["design_lift_m"].value = pd.rated_lift_m ?? "";
+    form.elements["design_length_in"].value = pd.length_in ?? 220;
+    form.elements["design_max_od_in"].value = pd.max_stator_od_in ?? "";
+  }
+  showDesignBlock();
   if (form.elements["engine_mode"]) {
     form.elements["engine_mode"].value = payload.options?.mode || "parity";
   }
@@ -675,10 +706,75 @@ async function postJson(url, payload) {
   return api(url, payload);
 }
 
+// Pump design tab: cross-section drawn to scale, the solved geometry, and where the coefficients came from.
+function renderDesign(d) {
+  const btn = document.getElementById("tab-design-btn");
+  btn.hidden = !d;
+  if (!d) {
+    if (btn.classList.contains("active")) document.querySelector('.tab-btn[data-tab="tab-pump"]').click();
+    return;
+  }
+  document.getElementById("design-summary").textContent =
+    `${d.name}: ${fmt(d.displacement_m3d_per_100rpm, 1)} m3/d per 100 RPM, ${fmt(d.stages, 1)} stages in ` +
+    `${fmt(d.length_in, 0)} in. Predicted, not tested.`;
+  const rows = [
+    ["R", d.r_in, 4, "in"], ["E", d.e_in, 4, "in"], ["O (offset)", d.o_in, 4, "in"], ["Stage pitch", d.pitch_in, 3, "in"],
+    ["Sharpness S", d.sharpness, 3, ""], ["Rotor major x minor", `${fmt(d.rotor_major_in, 3)} x ${fmt(d.rotor_minor_in, 3)}`, 0, "in"],
+    ["Stator minor diameter", d.stator_minor_in, 3, "in"], ["Stator major diameter", d.stator_major_in, 3, "in"],
+    ["Stator OD (minimum wall)", d.stator_od_in, 3, "in"], ["Stages", d.stages, 2, ""],
+    ["Stage offset (lambda)", d.stage_offset, 3, ""], ["Flux area", d.flux_area_in2, 3, "in2"],
+    ["Rotor area", d.rotor_area_in2, 3, "in2"], ["Displacement", d.gal_per_rev, 4, "gal/rev"],
+    ["Rotor min. radius of curvature", d.rotor_curvature_in, 3, "in"],
+    ["Stator min. radius of curvature", d.stator_curvature_in, 3, "in"],
+    ["Effective contact length per stage", d.contact_length_in, 2, "in"],
+    ["Real seal length per stage", d.total_contact_length_in, 2, "in"],
+    ["Total contact in the pump", d.total_contact_in, 0, "in"],
+    ["Slip coefficient alpha", d.alpha, 3, ""], ["Slip exponent beta1", d.beta1, 3, ""],
+    ["Torque epsilon", d.epsilon, 4, "ft.lb/psi"], ["Torque gamma", d.gamma, 1, "ft.lb"],
+  ];
+  const table = document.getElementById("design-table");
+  table.innerHTML = "";
+  for (const [label, v, digits, unit] of rows) {
+    const tr = document.createElement("tr");
+    const th = document.createElement("td"); th.textContent = label;
+    const td = document.createElement("td"); td.className = "num";
+    td.textContent = `${typeof v === "number" ? fmt(v, digits) : v} ${unit}`.trim();
+    tr.append(th, td);
+    table.appendChild(tr);
+  }
+  const list = document.getElementById("design-basis");
+  list.innerHTML = "";
+  for (const [text, flag] of [...d.notes.map((n) => [n, true]), ...d.basis.map((b) => [b, false])]) {
+    const li = document.createElement("li");
+    li.textContent = text;
+    if (flag) li.className = "flag";
+    list.appendChild(li);
+  }
+  const circle = (radius) => {
+    const pts = Array.from({ length: 121 }, (_, k) => (2 * Math.PI * k) / 120);
+    return { x: pts.map((t) => radius * Math.cos(t)), y: pts.map((t) => radius * Math.sin(t)) };
+  };
+  // The rotor sits off-centre by E in the stator; drawn here at the position the outline functions give.
+  const od = circle(d.stator_od_in / 2);
+  const span = d.stator_od_in / 2 * 1.08;
+  plot("chart-design", [
+    { ...od, mode: "lines", name: "Stator OD", line: { color: "#73766b", width: 1.5 }, fill: "toself", fillcolor: "rgba(115,118,107,0.12)", hoverinfo: "skip" },
+    { x: d.stator_outline.map((p) => p[0]), y: d.stator_outline.map((p) => p[1]), mode: "lines", name: "Stator bore",
+      line: { color: "#053a3f", width: 2 }, fill: "toself", fillcolor: "#ffffff", hoverinfo: "skip" },
+    { x: d.rotor_outline.map((p) => p[0]), y: d.rotor_outline.map((p) => p[1]), mode: "lines", name: "Rotor",
+      line: { color: "#7c8a0c", width: 2 }, fill: "toself", fillcolor: "rgba(172,190,21,0.35)", hoverinfo: "skip" },
+  ], {
+    title: "Cross-section (to scale, inches)",
+    xaxis: { range: [-span, span], zeroline: false }, yaxis: { range: [-span, span], scaleanchor: "x", zeroline: false },
+    height: 440,
+  });
+}
+
 async function analyze(payload) {
   statusEl.textContent = "Running...";
   lastPayload = payload;
   try {
+    renderDesign(payload.pump_design ? await api("/design", payload.pump_design) : null);
     const [analyzeResult, curvesResult] = await Promise.all([
       postJson("/analyze", payload),
       postJson("/curves", payload),
@@ -772,6 +868,37 @@ function renderAssumptions(resolved) {
   table.appendChild(body);
   document.getElementById("assumptions-notes").textContent = (resolved.notes || []).join(" ");
 }
+
+// Search displacement and rated lift for the highest total efficiency at this well's operating point, within
+// the ratings and the design rule; then fill the two fields and analyse.
+document.getElementById("optimize-btn").addEventListener("click", async (ev) => {
+  const btn = ev.currentTarget;
+  const note = document.getElementById("optimize-note");
+  const raw = formToPayload();
+  btn.disabled = true;
+  note.hidden = false;
+  note.textContent = "Searching designs… this can take up to a minute.";
+  try {
+    const resolved = await api("/assume", {
+      well: raw.well, oil_api_gravity: raw.oil_api_gravity,
+      surface_earth_temp_c: num(form.elements["surface_earth_temp_c"].value) ?? 10,
+    });
+    const res = await api("/optimize-design", {
+      well: resolved.well, alpha_override: raw.alpha_override, options: raw.options,
+      length_in: num(form.elements["design_length_in"].value) ?? 220,
+      max_stator_od_in: num(form.elements["design_max_od_in"].value),
+    });
+    form.elements["design_displacement"].value = res.design.displacement_m3d_per_100rpm;
+    form.elements["design_lift_m"].value = res.design.rated_lift_m;
+    note.textContent = `Best of ${res.feasible} workable designs: ${fmt(res.efficiency * 100, 1)}% total efficiency at ` +
+      `${fmt(res.rpm, 0)} RPM (${fmt(res.pressure_loading * 100, 0)}% of rated pressure). ${res.notes.join(" ")}`;
+    await run();
+  } catch (err) {
+    note.textContent = `Could not optimise: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // Typing in an auto-filled field makes it the user's value; clearing a field returns it to auto.
 for (const name of AUTO_FIELDS) {
