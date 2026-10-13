@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Rotoliptic Application Analyzer</title>
 <link rel="icon" type="image/png" href="img/rotoliptic-mark.png" />
-<link rel="stylesheet" href="style.css?v=14" />
+<link rel="stylesheet" href="style.css?v=16" />
 <script src="vendor/plotly-2.35.2.min.js"></script>
 </head>
 <body>
@@ -103,10 +103,11 @@
         </div>
 
         <div class="estimate-box">
-          <p class="box-title">Leave a field blank to have it filled in</p>
-          <p class="hint">Fields showing <em>auto</em> are estimated or assumed when left blank, then outlined here and
-            listed with their basis under the Assumptions tab. Type a value to override one; clear it to go back
-            to auto. The two inputs below feed the estimates.</p>
+          <p class="box-title">Where each input comes from</p>
+          <p class="hint">The tag beside each input says where its value comes from. <strong>Entered</strong>: a known
+            value. <strong>Assumed</strong>: a value you entered as your own assumption. <strong>Auto</strong>: the
+            software estimates or assumes it from the other inputs. Change the tag at any time; the Assumptions
+            tab lists every assumption with its basis. The two inputs below feed the estimates.</p>
           <div class="fields">
             <label class="field"><span class="field-label">Oil API gravity</span>
               <input type="number" step="any" name="oil_api_gravity" placeholder="e.g. 13.5" />
@@ -115,6 +116,7 @@
               <span class="ctl"><input type="number" step="any" name="surface_earth_temp_c" value="10" /><span class="unit">°C</span></span>
             </label>
           </div>
+          <button type="button" id="fill-btn" class="btn-outline">Fill in the Auto inputs now</button>
         </div>
 
         <div class="fields">
@@ -149,7 +151,7 @@
           <label class="field full"><span class="field-label">Rod coupling OD <small>at or below the rod diameter = continuous rod</small></span>
             <span class="ctl"><input type="number" step="any" name="coupling_od_in" placeholder="auto" /><span class="unit">in</span></span>
           </label>
-          <label class="field"><span class="field-label">Dogleg severity <small>assumed</small></span>
+          <label class="field"><span class="field-label">Dogleg severity</span>
             <span class="ctl"><input type="number" step="any" name="dogleg_severity_deg_per_100ft" placeholder="auto" /><span class="unit">°/100 ft</span></span>
           </label>
           <label class="field"><span class="field-label">Rod-tubing friction</span>
@@ -331,6 +333,13 @@
         <p id="assumptions-summary" class="chart-subtitle"></p>
         <div class="table-scroll"><table id="assumptions-table" class="data-table"></table></div>
         <p id="assumptions-notes" class="chart-subtitle"></p>
+        <details id="assumption-rules" class="rules" hidden>
+          <summary>How the software fills an input set to Auto</summary>
+          <p class="chart-subtitle">Automatic values are estimates from published correlations or typical defaults.
+            They are a starting point when data is missing, not a substitute for measured well data; each one is
+            listed above whenever it is used.</p>
+          <div class="table-scroll"><table id="assumption-rules-table" class="data-table"></table></div>
+        </details>
       </div>
 
       <div class="chart-group" id="tab-legacy">
@@ -348,6 +357,6 @@
 </main>
 
 <script src="engine-browser.js"></script>
-<script src="app.js?v=30"></script>
+<script src="app.js?v=34"></script>
 </body>
 </html>

@@ -237,7 +237,39 @@ textarea { font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem; r
 }
 .estimate-box .box-title { margin: 0 0 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--teal); }
 .estimate-box .hint:last-child { margin-bottom: 0; }
-input.assumed { border-color: var(--lime-dark); background: var(--lime-soft); }
+input.auto-filled { border-color: var(--lime-dark); background: var(--lime-soft); }
+input.user-assumed { border-color: var(--warn-ink); background: var(--warn-bg); }
+#fill-btn { width: 100%; margin-top: 0.7rem; }
+
+/* Source tag beside an input: entered, the user's assumption, or auto. */
+.field.has-src {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: end;
+  align-items: end;
+  gap: 0.2rem 0.3rem;
+}
+.field.has-src > .ctl, .field.has-src > input { grid-column: 1 / -1; grid-row: 2; }
+select.src {
+  grid-column: 2;
+  grid-row: 1;
+  width: auto;
+  padding: 0 0.45rem;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.5;
+  border-radius: 999px;
+  border-color: transparent;
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+select.src:hover, select.src:focus { border-color: var(--teal); }
+select.src[data-state="user_assumed"] { background: var(--warn-bg); color: var(--warn-ink); }
+select.src[data-state="auto"] { background: var(--lime-soft); color: var(--lime-dark); }
 input::placeholder { color: #a3a698; }
 
 .action-bar {
@@ -426,7 +458,10 @@ input::placeholder { color: #a3a698; }
 .tag { display: inline-block; border-radius: 999px; padding: 0.05rem 0.55rem; font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
 .tag.given { background: var(--bg); color: var(--muted); }
 .tag.estimated { background: var(--lime-soft); color: var(--lime-dark); }
-.tag.assumed { background: var(--warn-bg); color: var(--warn-ink); }
+.tag.assumed, .tag.user_assumed { background: var(--warn-bg); color: var(--warn-ink); }
+.tag.user_assumed { box-shadow: inset 0 0 0 1px var(--warn-ink); }
+details.rules { margin-top: 1rem; }
+details.rules > summary { cursor: pointer; font-weight: 700; color: var(--teal); margin-bottom: 0.5rem; }
 
 .kpi-note { font-size: 0.75rem; color: rgba(255, 255, 255, 0.7); margin-top: 0.1rem; white-space: nowrap; }
 .kpi.over .kpi-value, .kpi.over .kpi-note { color: #ffcf5c; }

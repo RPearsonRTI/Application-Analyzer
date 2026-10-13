@@ -15,6 +15,65 @@ const AUTO_FIELDS = [
   "dogleg_severity_deg_per_100ft", "rod_tubing_friction",
 ];
 
+// Inputs that are never filled automatically, but that the user may still mark as their own assumption.
+const REQUIRED_FIELDS = ["pump_depth", "fluid_level", "flowline_pressure", "desired_rate", "water_cut_pct", "gor_sm3_m3"];
+
+// Where each input comes from: "given" (entered as known data), "user_assumed" (entered, the user's own
+// assumption) or "auto" (the software fills it). One small select per field holds the state.
+const SOURCE_LABELS = { given: "Entered", user_assumed: "Assumed", auto: "Auto" };
+const SOURCE_TITLES = {
+  given: "Entered: a known value",
+  user_assumed: "Assumed: your own assumption; the results list it as one",
+  auto: "Auto: the software estimates or assumes it from the other inputs",
+};
+const sourceSelects = {};
+const sourceOf = (name) => (sourceSelects[name] ? sourceSelects[name].value : "given");
+
+function setSource(name, state) {
+  const sel = sourceSelects[name];
+  const el = form.elements[name];
+  sel.value = state;
+  sel.dataset.state = state;
+  sel.title = SOURCE_TITLES[state];
+  el.classList.toggle("user-assumed", state === "user_assumed");
+  if (state !== "auto") {
+    el.classList.remove("auto-filled");
+    el.title = "";
+  }
+}
+
+for (const name of [...REQUIRED_FIELDS, ...AUTO_FIELDS]) {
+  const el = form.elements[name];
+  const field = el.closest(".field");
+  const canAuto = AUTO_FIELDS.includes(name);
+  const sel = document.createElement("select");
+  sel.className = "src";
+  sel.setAttribute("aria-label", `Source of ${field.querySelector(".field-label").firstChild.textContent.trim()}`);
+  for (const state of canAuto ? ["given", "user_assumed", "auto"] : ["given", "user_assumed"]) {
+    const opt = document.createElement("option");
+    opt.value = state;
+    opt.textContent = SOURCE_LABELS[state];
+    opt.title = SOURCE_TITLES[state];
+    sel.appendChild(opt);
+  }
+  field.classList.add("has-src");
+  field.appendChild(sel);
+  sourceSelects[name] = sel;
+  setSource(name, canAuto && el.value === "" ? "auto" : "given");
+
+  sel.addEventListener("change", () => {
+    setSource(name, sel.value);
+    if (sel.value !== "auto") return;
+    el.value = "";                                   // handed back to the software: fill it straight away if possible
+    fillBlanks().catch(() => {});
+  });
+  // Typing in an auto field makes it the user's value; clearing a field that can be auto hands it back.
+  el.addEventListener("input", () => {
+    if (el.value === "" && canAuto) setSource(name, "auto");
+    else if (sourceOf(name) === "auto") setSource(name, "given");
+  });
+}
+
 const NUMERIC_FIELDS = new Set([
   "pump_depth", "fluid_level", "flowline_pressure", "casing_pressure", "desired_rate",
   "viscosity_cp", "water_cut_pct", "gor_sm3_m3", "gas_through_annulus_pct",
@@ -86,7 +145,7 @@ function formToPayload() {
     if (["pump_model", "location", "pad", "well_name", "alpha_override", "oil_api_gravity",
       "surface_earth_temp_c", "engine_mode", ...DESIGN_FIELDS].includes(key)) continue;
     if (key.startsWith("inflow_")) continue;
-    const auto = form.elements[key].classList && form.elements[key].classList.contains("assumed");
+    const auto = sourceOf(key) === "auto";
     well[key] = auto || value === "" ? (NUMERIC_FIELDS.has(key) ? null : value) : (NUMERIC_FIELDS.has(key) ? Number(value) : value);
   }
   Object.assign(well, inflowPayload(data));
@@ -102,6 +161,7 @@ function formToPayload() {
     oil_api_gravity: num(data.get("oil_api_gravity")),
     pump_design: pumpDesign,
     options: { mode: data.get("engine_mode") || "parity" },
+    user_assumed: Object.keys(sourceSelects).filter((k) => sourceOf(k) === "user_assumed" && form.elements[k].value !== ""),
   };
   return payload;
 }
@@ -159,13 +219,17 @@ function parseInflowPoints(text) {
 
 function payloadToForm(payload) {
   const well = payload.well || {};
-  form.querySelectorAll("input.assumed").forEach((el) => el.classList.remove("assumed"));
   for (const name of AUTO_FIELDS) form.elements[name].value = "";   // absent or null in the case = auto
   form.elements["gor_unit"].value = "sm3/m3";          // cases saved before the scf/bbl option have no unit
   for (const [key, value] of Object.entries(well)) {
     if (Array.isArray(value)) continue;
     const el = form.elements[key];
     if (el) el.value = value ?? "";
+  }
+  const mine = payload.user_assumed || [];
+  for (const name of Object.keys(sourceSelects)) {
+    const blank = form.elements[name].value === "";
+    setSource(name, blank && AUTO_FIELDS.includes(name) ? "auto" : (mine.includes(name) && !blank ? "user_assumed" : "given"));
   }
   const r = well.inflow_rate || [], p = well.inflow_pressure || [];
   form.elements["inflow_points"].value = r.map((q, i) => `${q}\t${p[i]}`).join("\n");
@@ -223,6 +287,8 @@ const IMPERIAL_ROWS = [
   ["RPM", "rpm", 1],
   ["Torque (ft.lb)", "torque_ftlb", 1],
   ["Pump share of torque (ft.lb)", "pump_torque_ftlb", 1],
+  ["Pump hydraulic torque (ft.lb)", "hydraulic_torque_ftlb", 1],
+  ["Pump friction torque (ft.lb)", "pump_friction_torque_ftlb", 1],
   ["Rod-string share of torque (ft.lb)", "rod_torque_ftlb", 1],
   ["Rod top load (lbf)", "rod_axial_load_lbf", 0],
   ["Rod top stress (psi)", "rod_top_stress_psi", 0],
@@ -254,6 +320,8 @@ const METRIC_ROWS = [
   ["RPM", "rpm", 1],
   ["Torque (Nm)", "torque_nm", 1],
   ["Pump share of torque (Nm)", "pump_torque_nm", 1],
+  ["Pump hydraulic torque (Nm)", "hydraulic_torque_nm", 1],
+  ["Pump friction torque (Nm)", "pump_friction_torque_nm", 1],
   ["Rod-string share of torque (Nm)", "rod_torque_nm", 1],
   ["Rod top load (kN)", "rod_axial_load_kn", 1],
   ["Rod top stress (MPa)", "rod_top_stress_mpa", 1],
@@ -729,6 +797,7 @@ function renderDesign(d) {
     ["Effective contact length per stage", d.contact_length_in, 2, "in"],
     ["Real seal length per stage", d.total_contact_length_in, 2, "in"],
     ["Total contact in the pump", d.total_contact_in, 0, "in"],
+    ["Side load on the rotor", d.side_load_area_in2, 3, "lbf per psi"],
     ["Slip coefficient alpha", d.alpha, 3, ""], ["Slip exponent beta1", d.beta1, 3, ""],
     ["Torque epsilon", d.epsilon, 4, "ft.lb/psi"], ["Torque gamma", d.gamma, 1, "ft.lb"],
   ];
@@ -770,15 +839,21 @@ function renderDesign(d) {
   });
 }
 
+let runId = 0;      // a newer run makes an older one's late results stale
+
 async function analyze(payload) {
   statusEl.textContent = "Running...";
   lastPayload = payload;
+  const id = ++runId;
   try {
     renderDesign(payload.pump_design ? await api("/design", payload.pump_design) : null);
-    const [analyzeResult, curvesResult] = await Promise.all([
-      postJson("/analyze", payload),
-      postJson("/curves", payload),
-    ]);
+    // The operating point is quick; the charts re-solve it a few hundred times, so they follow when ready.
+    // Sent in this order: the browser build answers requests one at a time.
+    const analyzePromise = postJson("/analyze", payload);
+    const curvesPromise = postJson("/curves", payload);
+    curvesPromise.catch(() => {});
+    const analyzeResult = await analyzePromise;
+    if (id !== runId) return;
     renderTable(document.getElementById("imperial-table"), analyzeResult.imperial_report, IMPERIAL_ROWS);
     renderTable(document.getElementById("metric-table"), analyzeResult.metric_report, METRIC_ROWS);
     const mode = payload.options?.mode || "parity";
@@ -799,74 +874,110 @@ async function analyze(payload) {
     }
     document.getElementById("chart-title").innerHTML =
       `<pre>${analyzeResult.chart_titles.imperial}</pre><pre>${analyzeResult.chart_titles.metric}</pre>`;
+    statusEl.textContent = "Results ready. Drawing the charts...";
+    const curvesResult = await curvesPromise;
+    if (id !== runId) return;
     renderCharts(curvesResult, analyzeResult.operating_point);
     statusEl.textContent = "Done.";
   } catch (err) {
-    statusEl.textContent = `Error: ${err.message}`;
+    if (id === runId) statusEl.textContent = `Error: ${err.message}`;
   }
 }
 
-// Fill the blanks (estimates and documented defaults), show them, then analyse the completed well.
-async function run() {
-  const raw = formToPayload();
-  statusEl.textContent = "Running...";
-  let resolved;
-  try {
-    resolved = await api("/assume", {
-      well: raw.well, oil_api_gravity: raw.oil_api_gravity,
-      surface_earth_temp_c: num(form.elements["surface_earth_temp_c"].value) ?? 10,
-    });
-  } catch (err) {
-    statusEl.textContent = `Error: ${err.message}`;
-    return;
-  }
+const assumeBody = (raw) => ({
+  well: raw.well, oil_api_gravity: raw.oil_api_gravity, user_assumed: raw.user_assumed,
+  surface_earth_temp_c: num(form.elements["surface_earth_temp_c"].value) ?? 10,
+});
+
+// Fill every input left on auto (estimates and documented defaults) and list where each input came from.
+async function fillBlanks(raw = formToPayload()) {
+  const resolved = await api("/assume", assumeBody(raw));
   for (const item of resolved.inputs) {
     const el = form.elements[item.field];
     if (!el || !AUTO_FIELDS.includes(item.field)) continue;
-    if (item.source === "given") {
-      el.classList.remove("assumed");
-      el.title = "";
-    } else {
-      el.value = item.value;
-      el.classList.add("assumed");
-      el.title = `${item.source === "estimated" ? "Estimated" : "Assumed"}: ${item.basis}`;
-    }
+    if (item.source !== "estimated" && item.source !== "assumed") continue;
+    setSource(item.field, "auto");
+    el.value = item.value;
+    el.classList.add("auto-filled");
+    el.title = `${item.source === "estimated" ? "Estimated" : "Assumed"} by the software: ${item.basis}`;
   }
   for (const unitField of ["casing_pressure_unit"]) {
     if (resolved.well[unitField]) form.elements[unitField].value = resolved.well[unitField];
   }
   renderAssumptions(resolved);
+  return resolved;
+}
+
+// Fill the blanks, show them, then analyse the completed well.
+async function run() {
+  const raw = formToPayload();
+  statusEl.textContent = "Running...";
+  let resolved;
+  try {
+    resolved = await fillBlanks(raw);
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message}`;
+    return;
+  }
   await analyze({ ...raw, well: resolved.well });
 }
 
+document.getElementById("fill-btn").addEventListener("click", async () => {
+  statusEl.textContent = "Filling the blanks...";
+  try {
+    const resolved = await fillBlanks();
+    const n = resolved.inputs.filter((i) => i.source === "estimated" || i.source === "assumed").length;
+    statusEl.textContent = `${n} input${n === 1 ? "" : "s"} filled; see the Assumptions tab. Not yet analysed.`;
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message}`;
+  }
+});
+
+const SOURCE_TAGS = { given: "Entered", user_assumed: "Assumed by user", estimated: "Estimated (auto)", assumed: "Assumed (auto)" };
+
 function renderAssumptions(resolved) {
-  const filled = resolved.inputs.filter((i) => i.source !== "given");
-  const count = document.getElementById("assumption-count");
-  count.textContent = filled.length;
-  count.hidden = filled.length === 0;
-  const nEst = filled.filter((i) => i.source === "estimated").length;
-  document.getElementById("assumptions-summary").textContent = filled.length
-    ? `${filled.length} of ${resolved.inputs.length} inputs were not given: ${nEst} estimated from the other inputs, ` +
-      `${filled.length - nEst} assumed. Enter a value in the form to replace any of them.`
-    : "Every input was entered; nothing was estimated or assumed.";
+  const count = (src) => resolved.inputs.filter((i) => i.source === src).length;
+  const nAuto = count("estimated") + count("assumed"), nUser = count("user_assumed");
+  const badge = document.getElementById("assumption-count");
+  badge.textContent = nAuto + nUser;
+  badge.hidden = nAuto + nUser === 0;
+  const parts = [];
+  if (nAuto) parts.push(`${nAuto} filled by the software (${count("estimated")} estimated from the other inputs, ${count("assumed")} assumed)`);
+  if (nUser) parts.push(`${nUser} entered as the user's own assumption`);
+  document.getElementById("assumptions-summary").textContent = parts.length
+    ? `Of ${resolved.inputs.length} inputs: ${parts.join("; ")}. Change any of them with the tag beside the field.`
+    : "Every input was entered as known data; nothing was estimated or assumed.";
+  const row = (cells) => {
+    const tr = document.createElement("tr");
+    for (const [content, cls] of cells) {
+      const td = document.createElement("td");
+      if (cls) td.className = cls;
+      td.append(content);
+      tr.appendChild(td);
+    }
+    return tr;
+  };
   const table = document.getElementById("assumptions-table");
   table.innerHTML = "<thead><tr><th>Input</th><th>Value</th><th>Source</th><th>Basis</th></tr></thead>";
   const body = document.createElement("tbody");
-  const order = { assumed: 0, estimated: 1, given: 2 };
+  const order = { assumed: 0, estimated: 1, user_assumed: 2, given: 3 };
   for (const i of [...resolved.inputs].sort((x, y) => order[x.source] - order[y.source])) {
-    const tr = document.createElement("tr");
-    const cell = (text, cls) => { const td = document.createElement("td"); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td; };
-    cell(i.label);
-    cell(`${fmt(i.value, 4)} ${i.unit}`.trim(), "num");
     const tag = document.createElement("span");
     tag.className = `tag ${i.source}`;
-    tag.textContent = i.source[0].toUpperCase() + i.source.slice(1);
-    cell("").appendChild(tag);
-    cell(i.source === "given" ? "Entered" : i.basis, "basis");
-    body.appendChild(tr);
+    tag.textContent = SOURCE_TAGS[i.source];
+    body.appendChild(row([[i.label], [`${fmt(i.value, 4)} ${i.unit}`.trim(), "num"], [tag], [i.source === "given" ? "Entered" : i.basis, "basis"]]));
   }
   table.appendChild(body);
   document.getElementById("assumptions-notes").textContent = (resolved.notes || []).join(" ");
+
+  const rules = document.getElementById("assumption-rules-table");
+  rules.innerHTML = "<thead><tr><th>Input</th><th>Automatic?</th><th>Logic and limits</th></tr></thead>";
+  const rulesBody = document.createElement("tbody");
+  for (const i of [...resolved.inputs].sort((x, y) => Number(y.auto) - Number(x.auto))) {
+    rulesBody.appendChild(row([[i.label], [i.auto ? "Yes" : "No"], [i.rule, "basis"]]));
+  }
+  rules.appendChild(rulesBody);
+  document.getElementById("assumption-rules").hidden = false;
 }
 
 // Search displacement and rated lift for the highest total efficiency at this well's operating point, within
@@ -879,10 +990,7 @@ document.getElementById("optimize-btn").addEventListener("click", async (ev) => 
   note.hidden = false;
   note.textContent = "Searching designs… this can take up to a minute.";
   try {
-    const resolved = await api("/assume", {
-      well: raw.well, oil_api_gravity: raw.oil_api_gravity,
-      surface_earth_temp_c: num(form.elements["surface_earth_temp_c"].value) ?? 10,
-    });
+    const resolved = await api("/assume", assumeBody(raw));
     const res = await api("/optimize-design", {
       well: resolved.well, alpha_override: raw.alpha_override, options: raw.options,
       length_in: num(form.elements["design_length_in"].value) ?? 220,
@@ -899,14 +1007,6 @@ document.getElementById("optimize-btn").addEventListener("click", async (ev) => 
     btn.disabled = false;
   }
 });
-
-// Typing in an auto-filled field makes it the user's value; clearing a field returns it to auto.
-for (const name of AUTO_FIELDS) {
-  form.elements[name].addEventListener("input", (ev) => {
-    ev.target.classList.remove("assumed");
-    ev.target.title = "";
-  });
-}
 
 form.addEventListener("submit", (ev) => {
   ev.preventDefault();
