@@ -411,9 +411,10 @@ function renderKpis() {
 function setUnits(system) {
   unitSystem = system;
   try { localStorage.setItem("rti-units", system); } catch (e) { /* no storage */ }
-  document.querySelectorAll("#unit-toggle button").forEach((b) => b.classList.toggle("active", b.dataset.units === system));
+  document.querySelectorAll("#unit-toggle button, #report-units button").forEach((b) => b.classList.toggle("active", b.dataset.units === system));
   document.querySelectorAll(".report-col").forEach((c) => { c.hidden = c.dataset.units !== system; });
   renderKpis();
+  if (lastDesign) renderDesign(lastDesign);
 }
 
 function nan2null(arr) {
@@ -775,31 +776,50 @@ async function postJson(url, payload) {
 }
 
 // Pump design tab: cross-section drawn to scale, the solved geometry, and where the coefficients came from.
+// The design arrives in inches, gal/rev and ft·lb; the unit toggle converts for display only.
+let lastDesign = null;
+
 function renderDesign(d) {
+  lastDesign = d;
   const btn = document.getElementById("tab-design-btn");
   btn.hidden = !d;
   if (!d) {
     if (btn.classList.contains("active")) document.querySelector('.tab-btn[data-tab="tab-pump"]').click();
     return;
   }
+  const metric = unitSystem === "metric";
+  // [factor, unit, extra decimals] per imperial unit; mm needs one fewer decimal than in.
+  const conv = metric
+    ? { in: [25.4, "mm", -1], in2: [645.16, "mm²", -2], gal: [3.785411784, "L/rev", 0], lbfpsi: [0.64516, "N per kPa", 0],
+        epsilon: [1.3558179483 / 6.894757293, "N·m/kPa", 1], ftlb: [1.3558179483, "N·m", 0] }
+    : { in: [1, "in", 0], in2: [1, "in²", 0], gal: [1, "gal/rev", 0], lbfpsi: [1, "lbf per psi", 0],
+        epsilon: [1, "ft·lb/psi", 0], ftlb: [1, "ft·lb", 0] };
+  const L = (v, digits) => fmt(v * conv.in[0], Math.max(0, digits + conv.in[2]));
+  const rate = metric
+    ? `${fmt(d.displacement_m3d_per_100rpm, 1)} m³/d`
+    : `${fmt(d.displacement_m3d_per_100rpm * 6.28981077, 0)} bpd`;
   document.getElementById("design-summary").textContent =
-    `${d.name}: ${fmt(d.displacement_m3d_per_100rpm, 1)} m3/d per 100 RPM, ${fmt(d.stages, 1)} stages in ` +
-    `${fmt(d.length_in, 0)} in. Predicted, not tested.`;
+    `${d.name}: ${rate} per 100 RPM, ${fmt(d.stages, 1)} stages in ${L(d.length_in, 0)} ${conv.in[1]}. ` +
+    "Predicted, not tested.";
+  const q = (v, digits, kind) => [v * conv[kind][0], Math.max(0, digits + conv[kind][2]), conv[kind][1]];
   const rows = [
-    ["R", d.r_in, 4, "in"], ["E", d.e_in, 4, "in"], ["O (offset)", d.o_in, 4, "in"], ["Stage pitch", d.pitch_in, 3, "in"],
-    ["Sharpness S", d.sharpness, 3, ""], ["Rotor major x minor", `${fmt(d.rotor_major_in, 3)} x ${fmt(d.rotor_minor_in, 3)}`, 0, "in"],
-    ["Stator minor diameter", d.stator_minor_in, 3, "in"], ["Stator major diameter", d.stator_major_in, 3, "in"],
-    ["Stator OD (minimum wall)", d.stator_od_in, 3, "in"], ["Stages", d.stages, 2, ""],
-    ["Stage offset (lambda)", d.stage_offset, 3, ""], ["Flux area", d.flux_area_in2, 3, "in2"],
-    ["Rotor area", d.rotor_area_in2, 3, "in2"], ["Displacement", d.gal_per_rev, 4, "gal/rev"],
-    ["Rotor min. radius of curvature", d.rotor_curvature_in, 3, "in"],
-    ["Stator min. radius of curvature", d.stator_curvature_in, 3, "in"],
-    ["Effective contact length per stage", d.contact_length_in, 2, "in"],
-    ["Real seal length per stage", d.total_contact_length_in, 2, "in"],
-    ["Total contact in the pump", d.total_contact_in, 0, "in"],
-    ["Side load on the rotor", d.side_load_area_in2, 3, "lbf per psi"],
-    ["Slip coefficient alpha", d.alpha, 3, ""], ["Slip exponent beta1", d.beta1, 3, ""],
-    ["Torque epsilon", d.epsilon, 4, "ft.lb/psi"], ["Torque gamma", d.gamma, 1, "ft.lb"],
+    ["R", ...q(d.r_in, 4, "in")], ["E", ...q(d.e_in, 4, "in")], ["O (offset)", ...q(d.o_in, 4, "in")],
+    ["Stage pitch", ...q(d.pitch_in, 3, "in")],
+    ["Sharpness S", d.sharpness, 3, ""],
+    ["Rotor major x minor", `${L(d.rotor_major_in, 3)} x ${L(d.rotor_minor_in, 3)}`, 0, conv.in[1]],
+    ["Stator minor diameter", ...q(d.stator_minor_in, 3, "in")], ["Stator major diameter", ...q(d.stator_major_in, 3, "in")],
+    ["Stator OD (minimum wall)", ...q(d.stator_od_in, 3, "in")], ["Stages", d.stages, 2, ""],
+    ["Stage offset (lambda)", d.stage_offset, 3, ""], ["Flux area", ...q(d.flux_area_in2, 3, "in2")],
+    ["Rotor area", ...q(d.rotor_area_in2, 3, "in2")], ["Displacement", ...q(d.gal_per_rev, 4, "gal")],
+    ["Rotor min. radius of curvature", ...q(d.rotor_curvature_in, 3, "in")],
+    ["Stator min. radius of curvature", ...q(d.stator_curvature_in, 3, "in")],
+    ["Effective contact length per stage", ...q(d.contact_length_in, 2, "in")],
+    ["Real seal length per stage", ...q(d.total_contact_length_in, 2, "in")],
+    ["Total contact in the pump", ...q(d.total_contact_in, 0, "in")],
+    ["Side load on the rotor", ...q(d.side_load_area_in2, 3, "lbfpsi")],
+    ["Slip coefficient alpha", d.alpha, 3, ""], ["Slip exponent at 1 cP", d.slip_exponent_1cp, 3, ""],
+    ["Slip coefficient beta1", d.beta1, 3, ""],
+    ["Torque epsilon", ...q(d.epsilon, 4, "epsilon")], ["Torque gamma", ...q(d.gamma, 1, "ftlb")],
   ];
   const table = document.getElementById("design-table");
   table.innerHTML = "";
@@ -819,34 +839,41 @@ function renderDesign(d) {
     if (flag) li.className = "flag";
     list.appendChild(li);
   }
+  const k = conv.in[0];
   const circle = (radius) => {
-    const pts = Array.from({ length: 121 }, (_, k) => (2 * Math.PI * k) / 120);
+    const pts = Array.from({ length: 121 }, (_, j) => (2 * Math.PI * j) / 120);
     return { x: pts.map((t) => radius * Math.cos(t)), y: pts.map((t) => radius * Math.sin(t)) };
   };
   // The rotor sits off-centre by E in the stator; drawn here at the position the outline functions give.
-  const od = circle(d.stator_od_in / 2);
-  const span = d.stator_od_in / 2 * 1.08;
+  const od = circle(d.stator_od_in / 2 * k);
+  const span = d.stator_od_in / 2 * 1.08 * k;
   plot("chart-design", [
     { ...od, mode: "lines", name: "Stator OD", line: { color: "#73766b", width: 1.5 }, fill: "toself", fillcolor: "rgba(115,118,107,0.12)", hoverinfo: "skip" },
-    { x: d.stator_outline.map((p) => p[0]), y: d.stator_outline.map((p) => p[1]), mode: "lines", name: "Stator bore",
+    { x: d.stator_outline.map((p) => p[0] * k), y: d.stator_outline.map((p) => p[1] * k), mode: "lines", name: "Stator bore",
       line: { color: "#053a3f", width: 2 }, fill: "toself", fillcolor: "#ffffff", hoverinfo: "skip" },
-    { x: d.rotor_outline.map((p) => p[0]), y: d.rotor_outline.map((p) => p[1]), mode: "lines", name: "Rotor",
+    { x: d.rotor_outline.map((p) => p[0] * k), y: d.rotor_outline.map((p) => p[1] * k), mode: "lines", name: "Rotor",
       line: { color: "#7c8a0c", width: 2 }, fill: "toself", fillcolor: "rgba(172,190,21,0.35)", hoverinfo: "skip" },
   ], {
-    title: "Cross-section (to scale, inches)",
+    title: `Cross-section (to scale, ${metric ? "mm" : "inches"})`,
     xaxis: { range: [-span, span], zeroline: false }, yaxis: { range: [-span, span], scaleanchor: "x", zeroline: false },
     height: 440,
   });
 }
 
 let runId = 0;      // a newer run makes an older one's late results stale
+// What the report prints (web/report.js): the completed inputs, where each came from, and the results of one run.
+let lastRun = null;
 
-async function analyze(payload) {
+async function analyze(payload, resolved) {
   statusEl.textContent = "Running...";
   lastPayload = payload;
   const id = ++runId;
+  const reportButton = document.getElementById("report-btn");
+  reportButton.disabled = true;
+  lastRun = null;
   try {
-    renderDesign(payload.pump_design ? await api("/design", payload.pump_design) : null);
+    const design = payload.pump_design ? await api("/design", payload.pump_design) : null;
+    renderDesign(design);
     // The operating point is quick; the charts re-solve it a few hundred times, so they follow when ready.
     // Sent in this order: the browser build answers requests one at a time.
     const analyzePromise = postJson("/analyze", payload);
@@ -863,6 +890,7 @@ async function analyze(payload) {
     document.getElementById("results-job").textContent = [h.location, h.pad, h.well].filter(Boolean).join(" · ");
     lastReports = { imperial: analyzeResult.imperial_report, metric: analyzeResult.metric_report };
     renderKpis();
+    lastRun = { id, payload, resolved, result: analyzeResult, design, chartsReady: false };
     const warningsEl = document.getElementById("warnings-notice");
     const warnings = analyzeResult.warnings || [];
     if (warnings.length) {
@@ -878,9 +906,13 @@ async function analyze(payload) {
     const curvesResult = await curvesPromise;
     if (id !== runId) return;
     renderCharts(curvesResult, analyzeResult.operating_point);
+    lastRun.chartsReady = true;
+    reportButton.disabled = false;
     statusEl.textContent = "Done.";
   } catch (err) {
-    if (id === runId) statusEl.textContent = `Error: ${err.message}`;
+    if (id !== runId) return;
+    statusEl.textContent = `Error: ${err.message}`;
+    reportButton.disabled = !lastRun;          // results without charts can still be reported
   }
 }
 
@@ -919,7 +951,7 @@ async function run() {
     statusEl.textContent = `Error: ${err.message}`;
     return;
   }
-  await analyze({ ...raw, well: resolved.well });
+  await analyze({ ...raw, well: resolved.well }, resolved);
 }
 
 document.getElementById("fill-btn").addEventListener("click", async () => {

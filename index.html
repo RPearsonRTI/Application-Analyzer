@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Rotoliptic Application Analyzer</title>
 <link rel="icon" type="image/png" href="img/rotoliptic-mark.png" />
-<link rel="stylesheet" href="style.css?v=16" />
+<link rel="stylesheet" href="style.css?v=19" />
 <script src="vendor/plotly-2.35.2.min.js"></script>
 </head>
 <body>
@@ -15,6 +15,7 @@
     <span class="app-name">Application Analyzer</span>
   </div>
   <div class="header-actions">
+    <button type="button" id="report-btn" class="btn-quiet" disabled>Report</button>
     <button type="button" id="save-case" class="btn-quiet">Save case</button>
     <label class="btn-quiet file-label">Load case<input type="file" id="load-case" accept="application/json" hidden /></label>
   </div>
@@ -356,7 +357,21 @@
   </div>
 </main>
 
+<div id="report-view" hidden>
+  <div class="report-toolbar">
+    <button type="button" id="report-close" class="btn-quiet">Back to the analyzer</button>
+    <div class="segmented" id="report-units" role="group" aria-label="Report units">
+      <button type="button" data-units="imperial">Imperial</button>
+      <button type="button" data-units="metric">Metric</button>
+    </div>
+    <button type="button" id="report-print" class="btn-primary">Print or save as PDF</button>
+  </div>
+  <article id="report-sheet"></article>
+</div>
+
+
 <script src="engine-browser.js"></script>
-<script src="app.js?v=34"></script>
+<script src="app.js?v=37"></script>
+<script src="report.js?v=1"></script>
 </body>
 </html>
