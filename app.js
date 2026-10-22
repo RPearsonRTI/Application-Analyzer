@@ -791,9 +791,9 @@ function renderDesign(d) {
   // [factor, unit, extra decimals] per imperial unit; mm needs one fewer decimal than in.
   const conv = metric
     ? { in: [25.4, "mm", -1], in2: [645.16, "mm²", -2], gal: [3.785411784, "L/rev", 0], lbfpsi: [0.64516, "N per kPa", 0],
-        epsilon: [1.3558179483 / 6.894757293, "N·m/kPa", 1], ftlb: [1.3558179483, "N·m", 0] }
+        epsilon: [1.3558179483 / 6.894757293, "N·m/kPa", 1], ftlb: [1.3558179483, "N·m", 0], lb: [0.45359237, "kg", 0] }
     : { in: [1, "in", 0], in2: [1, "in²", 0], gal: [1, "gal/rev", 0], lbfpsi: [1, "lbf per psi", 0],
-        epsilon: [1, "ft·lb/psi", 0], ftlb: [1, "ft·lb", 0] };
+        epsilon: [1, "ft·lb/psi", 0], ftlb: [1, "ft·lb", 0], lb: [1, "lb", 0] };
   const L = (v, digits) => fmt(v * conv.in[0], Math.max(0, digits + conv.in[2]));
   const rate = metric
     ? `${fmt(d.displacement_m3d_per_100rpm, 1)} m³/d`
@@ -817,6 +817,9 @@ function renderDesign(d) {
     ["Real seal length per stage", ...q(d.total_contact_length_in, 2, "in")],
     ["Total contact in the pump", ...q(d.total_contact_in, 0, "in")],
     ["Side load on the rotor", ...q(d.side_load_area_in2, 3, "lbfpsi")],
+    [`Rotor length (${metric ? "635 mm" : "25 in"} longer than the stator)`, ...q(d.rotor_length_in, 1, "in")],
+    ["Rotor weight (steel, without the rotor head)", ...q(d.rotor_weight_lb, 0, "lb")],
+    ["Stator weight (steel)", ...q(d.stator_weight_lb, 0, "lb")],
     ["Slip coefficient alpha", d.alpha, 3, ""], ["Slip exponent at 1 cP", d.slip_exponent_1cp, 3, ""],
     ["Slip coefficient beta1", d.beta1, 3, ""],
     ["Torque epsilon", ...q(d.epsilon, 4, "epsilon")], ["Torque gamma", ...q(d.gamma, 1, "ftlb")],
